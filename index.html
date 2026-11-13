@@ -5,73 +5,139 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>Draw &amp; Flow – Physik-Demo</title>
 <style>
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #0d1b2a; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+  :root { --bar-h: 44px; --ink: rgba(225, 238, 255, .86); --ink-dim: rgba(225, 238, 255, .5); --line: rgba(200, 225, 255, .14);
+          --glass: rgba(10, 24, 44, .55); --on: rgba(120, 200, 255, .2); --on-line: rgba(140, 210, 255, .55); --accent: #7cc8ff; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0d1b2a; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--ink); }
   canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; touch-action: none; display: block; }
-  #bar { position: fixed; left: 0; right: 0; top: 0; display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
-         padding: 6px 8px; background: rgba(0, 30, 80, .82); color: #fff; font-size: 13px; z-index: 2; user-select: none; }
-  #bar .grp { display: flex; gap: 4px; align-items: center; padding-right: 8px; border-right: 1px solid rgba(255,255,255,.2); }
-  #bar .grp:last-child { border-right: 0; }
-  button { background: #1f3f6b; color: #fff; border: 1px solid #3c6496; border-radius: 6px; padding: 5px 9px; font-size: 13px; cursor: pointer; }
-  button.on { background: #00b0f0; border-color: #7fd8ff; color: #001e50; font-weight: 600; }
-  button:hover { filter: brightness(1.15); }
-  input[type=range] { width: 90px; }
-  select { background: #1f3f6b; color: #fff; border: 1px solid #3c6496; border-radius: 6px; padding: 4px; }
-  #hud { position: fixed; right: 8px; bottom: 8px; color: #cfe8ff; font: 12px ui-monospace, Consolas, monospace; background: rgba(0,0,0,.45);
-         padding: 6px 8px; border-radius: 6px; z-index: 2; white-space: pre; pointer-events: none; }
-  #help { position: fixed; left: 8px; bottom: 8px; color: #cfe8ff; font-size: 12px; background: rgba(0,0,0,.45); padding: 6px 8px; border-radius: 6px; z-index: 2; max-width: 420px; }
-  #help b { color: #fff; }
+
+  /* --- schlanke Werkzeugleiste: nur Linien-Icons, Glas-Hintergrund, Haarlinie unten --- */
+  #bar { position: fixed; left: 0; right: 0; top: 0; height: var(--bar-h); padding: 0 6px; padding-top: env(safe-area-inset-top);
+         display: flex; align-items: center; gap: 2px; overflow-x: auto; scrollbar-width: none;
+         background: var(--glass); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+         border-bottom: 1px solid var(--line); z-index: 3; user-select: none; -webkit-user-select: none; }
+  #bar::-webkit-scrollbar { display: none; }
+  #bar .sep { flex: 0 0 1px; height: 20px; background: var(--line); margin: 0 4px; }
+  #bar .grow { flex: 1 1 auto; min-width: 2px; }
+  .ib { flex: 0 0 auto; width: 34px; height: 34px; display: grid; place-items: center; position: relative;
+        background: transparent; border: 1px solid transparent; border-radius: 9px; color: var(--ink); cursor: pointer; padding: 0;
+        -webkit-tap-highlight-color: transparent; }
+  .ib svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+  .ib:hover { background: rgba(255, 255, 255, .06); }
+  .ib.on { background: var(--on); border-color: var(--on-line); color: #fff; }
+  .ib:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
+  .ib .badge { position: absolute; right: 1px; bottom: 0; font: 600 8.5px/1 ui-monospace, Menlo, monospace; color: var(--ink-dim); }
+
+  /* --- Einstellungen (Zahnrad): Bottom-Sheet auf dem Handy, Seitenleiste am Desktop --- */
+  #sheet { position: fixed; z-index: 4; left: 0; right: 0; bottom: 0; max-height: 78vh; overflow-y: auto;
+           background: rgba(12, 26, 46, .94); -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+           border-top: 1px solid var(--line); border-radius: 16px 16px 0 0; padding: 6px 16px calc(16px + env(safe-area-inset-bottom));
+           transform: translateY(105%); transition: transform .22s ease; font-size: 14px; }
+  #sheet.open { transform: none; }
+  @media (min-width: 760px) {
+    #sheet { left: auto; top: calc(var(--bar-h) + 8px); right: 8px; bottom: auto; width: 330px; max-height: calc(100vh - var(--bar-h) - 24px);
+             border: 1px solid var(--line); border-radius: 14px; transform: translateX(110%); }
+  }
+  #sheet .grab { width: 36px; height: 4px; border-radius: 2px; background: var(--line); margin: 4px auto 8px; }
+  @media (min-width: 760px) { #sheet .grab { display: none; } }
+  #sheet h2 { font-size: 15px; font-weight: 600; margin: 4px 0 6px; display: flex; justify-content: space-between; align-items: center; }
+  #sheet h3 { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-dim); margin: 16px 0 6px; }
+  .row { display: flex; align-items: center; gap: 10px; min-height: 34px; }
+  .row label { flex: 1 1 auto; }
+  .row output { font: 12px ui-monospace, Menlo, monospace; color: var(--ink-dim); min-width: 64px; text-align: right; }
+  .row input[type=range] { flex: 1 1 140px; min-width: 0; accent-color: var(--accent); }
+  .row input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--accent); }
+  .hint { font-size: 12px; color: var(--ink-dim); line-height: 1.4; margin: 2px 0 4px; }
+  .seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .seg button { background: transparent; color: var(--ink); border: 0; padding: 6px 10px; font-size: 13px; cursor: pointer; }
+  .seg button + button { border-left: 1px solid var(--line); }
+  .seg button.on { background: var(--on); color: #fff; }
+  .btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+  .btn { background: transparent; color: var(--ink); border: 1px solid var(--line); border-radius: 8px; padding: 7px 12px; font-size: 13px; cursor: pointer; }
+  .btn:hover { background: rgba(255, 255, 255, .06); }
+  .x { background: transparent; border: 0; color: var(--ink-dim); font-size: 20px; cursor: pointer; padding: 0 4px; }
+
+  /* --- Hinweis-Toast (Szenenname, Hilfe) und optionale Statistik --- */
+  #toast { position: fixed; left: 50%; top: calc(var(--bar-h) + 10px + env(safe-area-inset-top)); transform: translate(-50%, -6px); z-index: 2;
+           max-width: min(460px, calc(100vw - 32px)); padding: 8px 12px; border-radius: 10px; background: rgba(8, 20, 38, .72);
+           border: 1px solid var(--line); font-size: 13px; line-height: 1.35; opacity: 0; transition: opacity .3s, transform .3s; pointer-events: none; }
+  #toast.show { opacity: 1; transform: translate(-50%, 0); }
+  #toast b { color: #fff; font-weight: 600; }
+  #toast small { display: block; color: var(--ink-dim); font-size: 12px; margin-top: 2px; }
+  #hud { position: fixed; right: 8px; bottom: calc(8px + env(safe-area-inset-bottom)); color: var(--ink-dim); font: 11px ui-monospace, Menlo, monospace;
+         background: rgba(0, 0, 0, .35); padding: 5px 7px; border-radius: 6px; z-index: 2; white-space: pre; pointer-events: none; display: none; }
 </style>
 </head>
 <body>
 <canvas id="cv"></canvas>
-<div id="bar">
-  <div class="grp">
-    <button data-tool="draw" class="on" title="Striche zeichnen">✏️ Zeichnen</button>
-    <button data-tool="erase" title="Striche und Bälle löschen">🧽 Radieren</button>
-    <button data-tool="ball" title="Ball setzen">⚽ Ball</button>
-    <button data-tool="pour" title="Material an der Zeigerposition schütten">🫗 Schütten</button>
-  </div>
-  <div class="grp">
-    Material
-    <select id="mat"><option value="0">💧 Wasser</option><option value="1">🟫 Sand</option></select>
-  </div>
-  <div class="grp">
-    <button id="rain" class="on">🌧️ Regen</button>
-    <input id="rate" type="range" min="0" max="400" value="150" title="Partikel pro Sekunde">
-  </div>
-  <div class="grp">
-    💨 Wind <input id="wind" type="range" min="-12" max="12" step="0.5" value="0"> <span id="windv">0 m/s</span>
-    <label><input id="gust" type="checkbox" checked> Böen</label>
-  </div>
-  <div class="grp">
-    Ball
-    <select id="bdens"><option value="0.5">leicht (schwimmt)</option><option value="3">schwer (sinkt)</option></select>
-    <select id="bsize"><option value="14">klein</option><option value="22" selected>mittel</option><option value="34">groß</option></select>
-  </div>
-  <div class="grp">
-    <button id="undo">↶ Rückgängig</button>
-    <button id="clearP">Partikel leeren</button>
-    <button id="scene">Demo-Szene</button>
-    <button id="reset">Alles löschen</button>
-    <button id="pause">⏸ Pause</button>
-    <button id="dbg">Debug</button>
-  </div>
+<div id="bar" role="toolbar" aria-label="Werkzeuge">
+  <button class="ib on" data-tool="draw" title="Zeichnen" aria-label="Zeichnen"><svg viewBox="0 0 24 24"><path d="M4 20l1-4L16 5l3 3L8 19z"/><path d="M14 7l3 3"/></svg></button>
+  <button class="ib" data-tool="erase" title="Radieren" aria-label="Radieren"><svg viewBox="0 0 24 24"><path d="M9 19L4 14 14 4l6 6-9 9z"/><path d="M9 19h11"/><path d="M7 11l6 6"/></svg></button>
+  <button class="ib" data-tool="ball" title="Ball setzen" aria-label="Ball setzen"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7.5"/><path d="M12 12l5.3-5.3"/></svg></button>
+  <button class="ib" data-tool="pour" title="Schütten (gedrückt halten)" aria-label="Schütten"><svg viewBox="0 0 24 24"><path d="M4 6l10-2 2 9-8 2z"/><path d="M16 13l2 1"/><path d="M18 17v1.5M15 19v1.5M20.5 19.5v1"/></svg></button>
+  <span class="sep"></span>
+  <button class="ib" id="mat" title="Material: Wasser" aria-label="Material wechseln"><svg viewBox="0 0 24 24" id="matIcon"></svg></button>
+  <button class="ib on" id="rain" title="Regen an/aus" aria-label="Regen an/aus"><svg viewBox="0 0 24 24"><path d="M7 14a4 4 0 0 1 .4-8 5 5 0 0 1 9.4 1.6A3.2 3.2 0 0 1 17 14z"/><path d="M8.5 17l-1 3M12.5 17l-1 3M16.5 17l-1 3"/></svg></button>
+  <span class="grow"></span>
+  <button class="ib" id="undo" title="Rückgängig" aria-label="Rückgängig"><svg viewBox="0 0 24 24"><path d="M9 5L4 10l5 5"/><path d="M4 10h10a5 5 0 0 1 0 10h-3"/></svg></button>
+  <button class="ib" id="scene" title="Nächste Demo" aria-label="Nächste Demo"><svg viewBox="0 0 24 24"><path d="M4 6l7 6-7 6z"/><path d="M12 6l7 6-7 6z"/></svg><span class="badge" id="sceneNo"></span></button>
+  <button class="ib" id="pause" title="Pause" aria-label="Pause"><svg viewBox="0 0 24 24" id="pauseIcon"><path d="M9 5v14M15 5v14"/></svg></button>
+  <button class="ib" id="gear" title="Einstellungen" aria-label="Einstellungen"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
 </div>
+
+<div id="sheet" role="dialog" aria-label="Einstellungen">
+  <div class="grab"></div>
+  <h2>Einstellungen <button class="x" id="close" aria-label="Schließen">×</button></h2>
+
+  <h3>Partikel</h3>
+  <div class="row"><label for="maxP">Max. Wassertropfen</label><output id="maxPv"></output></div>
+  <div class="row"><input id="maxP" type="range" min="500" max="10000" step="500"></div>
+  <div class="row"><label for="auto">Auto-Leistung</label><input id="auto" type="checkbox"></div>
+  <div class="hint">Ruckelt die Simulation, wird das Budget automatisch unter das Maximum gesenkt. <span id="budget"></span></div>
+
+  <h3>Wasser</h3>
+  <div class="row"><label for="damp">Dämpfung</label><output id="dampv"></output></div>
+  <div class="row"><input id="damp" type="range" min="0" max="100" step="5"></div>
+  <div class="hint">Innere Reibung (Viskosität). Höher = Wellen und Schwappen klingen schneller ab, das Becken wird still.</div>
+  <div class="row"><label>Präzision</label>
+    <span class="seg" id="sub"><button data-v="4">4</button><button data-v="6">6</button><button data-v="8">8</button><button data-v="10">10</button></span></div>
+  <div class="hint">Teilschritte pro Bild. Weniger = schneller, tiefes Wasser wird dann unruhiger.</div>
+  <div class="row"><label for="rate">Regenstärke</label><output id="ratev"></output></div>
+  <div class="row"><input id="rate" type="range" min="0" max="400" step="10"></div>
+
+  <h3>Wind</h3>
+  <div class="row"><label for="wind">Windstärke</label><output id="windv"></output></div>
+  <div class="row"><input id="wind" type="range" min="-12" max="12" step="0.5"></div>
+  <div class="row"><label for="gust">Böen</label><input id="gust" type="checkbox"></div>
+
+  <h3>Ball</h3>
+  <div class="row"><label>Dichte</label><span class="seg" id="bdens"><button data-v="0.5">leicht · schwimmt</button><button data-v="3">schwer · sinkt</button></span></div>
+  <div class="row"><label>Größe</label><span class="seg" id="bsize"><button data-v="14">S</button><button data-v="22">M</button><button data-v="34">L</button></span></div>
+
+  <h3>Anzeige &amp; Aktionen</h3>
+  <div class="row"><label for="hudOn">Statistik einblenden</label><input id="hudOn" type="checkbox"></div>
+  <div class="row"><label for="dbg">Debug (freie Tropfen markieren)</label><input id="dbg" type="checkbox"></div>
+  <div class="btns">
+    <button class="btn" id="clearP">Partikel leeren</button>
+    <button class="btn" id="reset">Alles löschen</button>
+    <button class="btn" id="defaults">Standardwerte</button>
+  </div>
+  <p class="hint" style="margin-top:14px"><b>Zeichne</b> mit Maus oder Finger: ein U fängt Wasser, eine Schräge leitet ab, ein Ball rollt.
+  Das Verhalten ergibt sich aus der Simulation, nicht aus einer Formerkennung. Maßstab: 1 m = 250 px.</p>
+</div>
+<div id="toast"></div>
 <div id="hud"></div>
-<div id="help"><b>Zeichne</b> mit Maus oder Finger: ein U fängt Wasser, eine Schräge leitet ab, ein Ball rollt.
-Das Verhalten ergibt sich aus der Simulation, nicht aus einer Formerkennung. Maßstab: 1 m = 250 px.</div>
 
 <script>
 // ===== Physik-Kern (ohne Abhängigkeiten) =====
 // Einheiten: Pixel und Sekunden. Maßstab: 1 m = PPM px.
 function createSim(W, H) {
   const S = {};
-  const MAXP = 6000;
+  const MAXP = 10000;         // Obergrenze des Einstellschiebers
   const PPM = 250;
   const G = 9.81 * PPM;
-  const SUB = 4;            // Substeps pro Frame
+  let SUB = 8;              // Substeps pro Frame (Kompression einer Wassersäule ~ G·h², daher 8 statt 4)
   const RS = 5;             // Strichradius (halbe Dicke) in px
-  const CELL = 8;           // Partikelgitter
+  const CELL = 14;          // Partikelgitter (>= Kernelradius HK des Wasserdrucks)
   const SCELL = 32;         // Strichgitter
   const MARGIN = 64;
 
@@ -81,17 +147,17 @@ function createSim(W, H) {
     { name: 'Wasser', dens: 1.0, muS: 0.0, muK: 0.0, wallMu: 0.03, drag: 2.0, r: 3.0, rj: 0.12 },
     { name: 'Sand',   dens: 1.6, muS: 0.8, muK: 0.6, wallMu: 0.9, drag: 2.5, r: 2.6, rj: 0.2 },
   ];
-  S.MAT = MAT; S.shock = 0.6; S.preStab = true; S.PPM = PPM; S.RS = RS;
+  S.MAT = MAT; S.waterArea = 44; S.ringCal = 1; S.ballWaterDrag = 8; S.shock = 0.6; S.preStab = true; S.PPM = PPM; S.RS = RS;
 
   // --- Partikel (Structure of Arrays) ---
   const x = new Float32Array(MAXP), y = new Float32Array(MAXP);
   const px = new Float32Array(MAXP), py = new Float32Array(MAXP);
   const vx = new Float32Array(MAXP), vy = new Float32Array(MAXP);
-  const r = new Float32Array(MAXP), im = new Float32Array(MAXP);
+  const r = new Float32Array(MAXP), im = new Float32Array(MAXP), rho = new Float32Array(MAXP), rhoN = new Float32Array(MAXP);
   const type = new Uint8Array(MAXP), nc = new Uint8Array(MAXP), wet = new Uint8Array(MAXP), shade = new Float32Array(MAXP);
   S.p = { x, y, vx, vy, r, type, shade, nc };
   S.n = 0;
-  S.maxP = 3000;
+  S.maxP = 5000;        // aktuelles Budget (wird von der UI gesetzt)
 
   // --- Bälle ---
   S.balls = [];
@@ -178,13 +244,17 @@ function createSim(W, H) {
     const i = S.n++; const m = MAT[t];
     const rad = m.r * (1 + (Math.random() * 2 - 1) * m.rj);   // Größenstreuung verhindert Kristallgitter
     x[i] = px[i] = X; y[i] = py[i] = Y; vx[i] = VX; vy[i] = VY; r[i] = rad; type[i] = t;
-    im[i] = 1 / (m.dens * Math.PI * rad * rad); nc[i] = 0; shade[i] = Math.random();
+    // Masse = Dichte × eingenommene Fläche. Wasser steht im Dichtemodell weiter auseinander
+    // (Ruheabstand ~7 px statt 2r = 6 px) -> reale Fläche pro Tropfen statt πr², sonst wäre Wasser
+    // effektiv nur ~0,6-mal so dicht und leichte Bälle würden nicht schwimmen.
+    const area = t === 0 ? S.waterArea * (rad / m.r) ** 2 : Math.PI * rad * rad;
+    im[i] = 1 / (m.dens * area); nc[i] = 0; shade[i] = Math.random(); rho[i] = 0; rhoN[i] = 0;
     return i;
   };
   function removeP(i) {
     const l = --S.n; if (i === l) return;
     x[i] = x[l]; y[i] = y[l]; px[i] = px[l]; py[i] = py[l]; vx[i] = vx[l]; vy[i] = vy[l];
-    r[i] = r[l]; im[i] = im[l]; type[i] = type[l]; nc[i] = nc[l]; shade[i] = shade[l];
+    r[i] = r[l]; im[i] = im[l]; type[i] = type[l]; nc[i] = nc[l]; shade[i] = shade[l]; rho[i] = rho[l]; rhoN[i] = rhoN[l];
   }
   S.clearParticles = function (t) {
     for (let i = S.n - 1; i >= 0; i--) if (t === undefined || type[i] === t) removeP(i);
@@ -202,9 +272,37 @@ function createSim(W, H) {
     for (const s of sc) if (distSeg(X, Y, segAx[s], segAy[s], segBx[s], segBy[s]) < RS + rad) return false;
     return true;
   };
-  S.addBall = function (X, Y, R, dens) {
+  // liegt (X,Y) mit Radius rad in einem Strich?
+  S.nearStroke = function (X, Y, rad) {
+    const sc = segGrid[sgr(Y) * sgCols + sgc(X)];
+    for (const s of sc) if (distSeg(X, Y, segAx[s], segAy[s], segBx[s], segBy[s]) < RS + rad + 0.5) return true;
+    return false;
+  };
+  // Fläche (Polygon) mit Partikeln im Dreiecksgitter füllen – überlappungsfrei, damit nichts explodiert
+  S.fillPoly = function (t, poly, maxCount) {
+    const m = MAT[t], d = m.r * 2 * (1 + m.rj) + 0.2, dy = d * 0.87;
+    let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+    for (const q of poly) { x0 = Math.min(x0, q[0]); x1 = Math.max(x1, q[0]); y0 = Math.min(y0, q[1]); y1 = Math.max(y1, q[1]); }
+    let cnt = 0, row = 0;
+    for (let Y = y1 - d * 0.6; Y > y0 && cnt < (maxCount || 1e9); Y -= dy, row++) {
+      for (let X = x0 + d * 0.6 + (row & 1) * d * 0.5; X < x1 && cnt < (maxCount || 1e9); X += d) {
+        if (!inPoly(X, Y, poly) || S.nearStroke(X, Y, d * 0.5)) continue;
+        if (S.addParticle(t, X, Y, 0, 0) < 0) return cnt;
+        cnt++;
+      }
+    }
+    return cnt;
+  };
+  function inPoly(X, Y, P) {
+    let c = false;
+    for (let i = 0, j = P.length - 1; i < P.length; j = i++)
+      if ((P[i][1] > Y) !== (P[j][1] > Y) && X < (P[j][0] - P[i][0]) * (Y - P[i][1]) / (P[j][1] - P[i][1]) + P[i][0]) c = !c;
+    return c;
+  }
+  // e = Stoßzahl gegen Striche (0 = unelastisch wie bisher)
+  S.addBall = function (X, Y, R, dens, e) {
     const m = dens * Math.PI * R * R;
-    S.balls.push({ x: X, y: Y, px: X, py: Y, vx: 0, vy: 0, r: R, dens, m, im: 1 / m, I: 0.5 * m * R * R, w: 0, ang: 0, cn: [] });
+    S.balls.push({ x: X, y: Y, px: X, py: Y, vx: 0, vy: 0, r: R, dens, m, im: 1 / m, I: 0.5 * m * R * R, w: 0, ang: 0, cn: [], sub: 0, wvx: 0, wvy: 0, e: e || 0, mu: 0.6, v0x: 0, v0y: 0 });
   };
 
   // ================= Wind =================
@@ -255,13 +353,18 @@ function createSim(W, H) {
 
   // ================= Constraints =================
   let doFric = true;
+  // Vorstabilisierung nur für Sand-Kontakte (stabile Haufen); Wasser braucht sie nicht
+  function pairPre(i, j) { if (type[i] === 0 && type[j] === 0) return; pair(i, j, false); }
+  // Harte Kontakte: Sand-Sand, Sand-Wasser (Wasser-Wasser läuft über den Dichtedruck, siehe pairAll)
+  function pairPre(i, j) { if (type[i] === 0 && type[j] === 0) return; pair(i, j, false); }
   function pair(i, j, count) {
     const dx = x[j] - x[i], dy = y[j] - y[i]; const d2 = dx * dx + dy * dy; const R = r[i] + r[j];
     if (count && d2 < R * R * 1.8) { if (nc[i] < 255) nc[i]++; if (nc[j] < 255) nc[j]++; if (type[j] === 0) wet[i] = 1; if (type[i] === 0) wet[j] = 1; }
     if (d2 >= R * R || d2 < 1e-12) return;
     const d = Math.sqrt(d2), pen = R - d, nx = dx / d, ny = dy / d;
-    // Shock Propagation: untere Partikel wirken schwerer -> stabile Stapel/Haufen in 1 Iteration
-    // nur Sand-Sand: Wasser soll frei fließen
+    // Shock Propagation: untere Partikel wirken schwerer -> stabile Stapel/Haufen in 1 Iteration.
+    // Nur Sand-Sand! Bei Wasser würde das den hydrostatischen Druck abschneiden
+    // (kommunizierende Röhren gleichen sich dann nicht mehr aus).
     let wi = im[i]; const wj = im[j];
     if (type[i] === 1 && type[j] === 1) { let e = -S.shock * (y[i] - y[j]); e = e > 6 ? 6 : e < -6 ? -6 : e; wi *= Math.exp(e); }
     const ws = wi + wj;
@@ -299,11 +402,73 @@ function createSim(W, H) {
       }
     }
   }
+
+  // Nachbarpaarliste: einmal pro Substep aus dem Gitter (Reihenfolge wie forPairs: von unten nach oben),
+  // danach laufen Kontakt-/Druck- und Viskositätsdurchlauf direkt über die Liste (spart Gittersuche und Callbacks).
+  let pI = new Int32Array(1 << 16), pJ = new Int32Array(1 << 16), nPairs = 0, nPairsN = -1;
+  function buildPairs(R2) {
+    nPairs = 0;
+    for (let rr = gRows - 1; rr >= 0; rr--) for (let c = 0; c < gCols; c++) {
+      const cell = rr * gCols + c, s0 = cellStart[cell], s1 = cellStart[cell + 1];
+      if (s0 === s1) continue;
+      for (let a = s0; a < s1; a++) {
+        const i = cellIdx[a], xi = x[i], yi = y[i];
+        for (let b = a + 1; b < s1; b++) addPair(i, cellIdx[b], xi, yi, R2);
+        if (c + 1 < gCols) { const n = cell + 1; for (let b = cellStart[n]; b < cellStart[n + 1]; b++) addPair(i, cellIdx[b], xi, yi, R2); }
+        if (rr + 1 < gRows) for (let dc = -1; dc <= 1; dc++) {
+          const cc = c + dc; if (cc < 0 || cc >= gCols) continue;
+          const n = cell + gCols + dc; for (let b = cellStart[n]; b < cellStart[n + 1]; b++) addPair(i, cellIdx[b], xi, yi, R2);
+        }
+      }
+    }
+  }
+  function addPair(i, j, xi, yi, R2) {
+    const dx = x[j] - xi, dy = y[j] - yi; if (dx * dx + dy * dy >= R2) return;
+    if (nPairs === pI.length) { const a = new Int32Array(pI.length * 2), b = new Int32Array(pI.length * 2); a.set(pI); b.set(pJ); pI = a; pJ = b; }
+    pI[nPairs] = i; pJ[nPairs] = j; nPairs++;
+  }
+
+  // ===== Wasser: Double Density Relaxation (Clavet et al. 2005) =====
+  // Harte Kugelkontakte allein verhalten sich im Ruhezustand wie ein Glas: die Packung verklemmt,
+  // Pegel gleichen sich nicht aus, ein leichter Ball bleibt unter Wasser stecken. Deshalb erzeugt bei
+  // Wasser-Wasser ein Druck aus der lokalen Dichte (Kernelradius HK) die Abstoßung:
+  //   rho  = Σ(1-q)²,  rhoN = Σ(1-q)³,  q = d/HK
+  //   P = kP·max(0, rho-rho0),  PN = kN·rhoN   ->  Verschiebung D = h²·(P(1-q) + PN(1-q)²)
+  // Nur Abstoßung (P >= 0): negative Drücke wirken wie Oberflächenspannung und lassen Wasser "kleben".
+  // Die Dichte wird im Viskositätsdurchlauf des vorigen Substeps mitberechnet (spart einen Gitterdurchlauf).
+  S.HK = 13; S.rho0 = 2.0; S.kP = 4e5; S.kN = 8e5; S.dmax = 1.5;
+  let HH = 0, IHK = 0, hh2 = 0;
+  function pairAll(i, j, count) {
+    if (type[i] !== 0 || type[j] !== 0) { pair(i, j, count); return; }
+    const dx = x[j] - x[i], dy = y[j] - y[i], d2 = dx * dx + dy * dy; if (d2 >= HH || d2 < 1e-12) return;
+    if (count && d2 < (r[i] + r[j]) * (r[i] + r[j]) * 1.8) { if (nc[i] < 255) nc[i]++; if (nc[j] < 255) nc[j]++; wet[i] = 1; wet[j] = 1; }
+    const d = Math.sqrt(d2), q = 1 - d * IHK;
+    let P = S.kP * (rho[i] + rho[j] - 2 * S.rho0) * 0.5; if (P < 0) P = 0;
+    const PN = S.kN * (rhoN[i] + rhoN[j]) * 0.5;
+    let D = hh2 * (P * q + PN * q * q); if (D > S.dmax) D = S.dmax;
+    const ux = dx / d * D * 0.5, uy = dy / d * D * 0.5; x[i] -= ux; y[i] -= uy; x[j] += ux; y[j] += uy;
+  }
+  // Viskosität (XSPH) + Dichte für den nächsten Substep in einem Durchlauf
+  function viscDens(i, j) {
+    if (type[i] !== 0 || type[j] !== 0) { visc(i, j); return; }
+    const dx = x[j] - x[i], dy = y[j] - y[i], d2 = dx * dx + dy * dy; if (d2 >= HH) return;
+    const d = Math.sqrt(d2), q = 1 - d * IHK, q2 = q * q; rho[i] += q2; rho[j] += q2; rhoN[i] += q2 * q; rhoN[j] += q2 * q;
+    const R = (r[i] + r[j]) * 1.5; if (d >= R) return;
+    const w = S.viscosity * (1 - d / R);
+    const dvx = (vx[j] - vx[i]) * w * 0.5, dvy = (vy[j] - vy[i]) * w * 0.5;
+    vx[i] += dvx; vy[i] += dvy; vx[j] -= dvx; vy[j] -= dvy;
+  }
+
   S.wetFriction = 0.3;
-  function solveParticles(count) { if (count) { nc.fill(0, 0, S.n); wet.fill(0, 0, S.n); } forPairs(pair, count); }
-  // XSPH-artige Viskosität: Wasser glättet Geschwindigkeiten mit Nachbarn (dämpft Spritzer und Zittern)
-  S.viscosity = 0.12;
+  S.nSand = 0;
+  // Dämpfung 0..1 -> Viskosität. 0.5 = Standard: Schwappen klingt in wenigen Sekunden ab, das Becken wird still.
+  S.setDamping = function (d) { S.damping = d; S.viscosity = 0.1 + 0.7 * d; };
+  S.setDamping(0.5);
+  // Präzision: Substeps pro Frame. Weniger = schneller, aber tiefes Wasser wird unruhiger.
+  S.setSub = function (v) { SUB = v; S.SUB = v; };
+  S.setSub(SUB);
   S.sandDamp = 0.15;
+  // Sand: inelastische Kornstöße
   function visc(i, j) {
     let k, R;
     if (type[i] === 0 && type[j] === 0) { k = S.viscosity; R = (r[i] + r[j]) * 1.5; }
@@ -374,20 +539,33 @@ function createSim(W, H) {
     const B = S.balls;
     for (let a = 0; a < B.length; a++) {
       const b = B[a];
-      // Ball <-> Partikel (Masse-gewichtet => Auftrieb entsteht von selbst)
-      const c0 = Math.floor((b.x - b.r - 4 + MARGIN) / CELL), c1 = Math.floor((b.x + b.r + 4 + MARGIN) / CELL);
-      const r0 = Math.floor((b.y - b.r - 4 + MARGIN) / CELL), r1 = Math.floor((b.y + b.r + 4 + MARGIN) / CELL);
+      // Ball <-> Partikel.
+      // Sand: masse-gewichteter harter Kontakt. Wasser: der Ball verdrängt die Tropfen vollständig, die
+      // Rückwirkung kommt explizit über Archimedes (Auftrieb = ρ_W·g·V_eingetaucht) und Strömungswiderstand.
+      // Grund: der weiche Dichtedruck überträgt sich über harte Kontakte nur schwach -> Bälle würden nicht schwimmen.
+      const RING = 7;
+      const c0 = Math.floor((b.x - b.r - RING - 4 + MARGIN) / CELL), c1 = Math.floor((b.x + b.r + RING + 4 + MARGIN) / CELL);
+      const r0 = Math.floor((b.y - b.r - RING - 4 + MARGIN) / CELL), r1 = Math.floor((b.y + b.r + RING + 4 + MARGIN) / CELL);
+      let nW = 0, svx = 0, svy = 0;
       for (let rr = Math.max(0, r0); rr <= Math.min(gRows - 1, r1); rr++) for (let cc = Math.max(0, c0); cc <= Math.min(gCols - 1, c1); cc++) {
         const cell = rr * gCols + cc;
         for (let q = cellStart[cell]; q < cellStart[cell + 1]; q++) {
           const i = cellIdx[q];
           const dx = x[i] - b.x, dy = y[i] - b.y, R = b.r + r[i], d2 = dx * dx + dy * dy;
+          if (type[i] === 0 && d2 < (R + RING) * (R + RING)) { nW++; svx += vx[i]; svy += vy[i]; }
           if (d2 >= R * R || d2 < 1e-12) continue;
-          const d = Math.sqrt(d2), pen = R - d, nx = dx / d, ny = dy / d, ws = im[i] + b.im;
+          const d = Math.sqrt(d2), pen = R - d, nx = dx / d, ny = dy / d;
+          if (type[i] === 0) { x[i] += nx * pen; y[i] += ny * pen; continue; }
+          const ws = im[i] + b.im;
           x[i] += nx * pen * im[i] / ws; y[i] += ny * pen * im[i] / ws;
           b.x -= nx * pen * b.im / ws; b.y -= ny * pen * b.im / ws;
         }
       }
+      // eingetauchter Anteil ≈ Belegung des Rings um den Ball (geglättet gegen Rauschen)
+      const full = Math.PI * ((b.r + 3 + RING) ** 2 - (b.r + 3) ** 2) / S.waterArea * S.ringCal;
+      const f = Math.min(1, nW / full);
+      b.sub += (f - b.sub) * 0.25;
+      if (nW > 0) { b.wvx = svx / nW; b.wvy = svy / nW; }
       // Ball <-> Ball
       for (let c = a + 1; c < B.length; c++) {
         const o = B[c]; const dx = o.x - b.x, dy = o.y - b.y, R = b.r + o.r, d2 = dx * dx + dy * dy;
@@ -408,8 +586,9 @@ function createSim(W, H) {
     const sign = Math.sign(S.wind);
     if (sign !== 0 && (shelterDirty || sign !== shelterSign)) rebuildShelter(sign);
     const Wpx = S.windNow * PPM;
+    let ns = 0; for (let i = 0; i < S.n; i++) ns += type[i]; S.nSand = ns;
     const h = dt / SUB;
-    for (let s = 0; s < SUB; s++) substep(h, Wpx, s === 0);
+    for (let s = 0; s < SUB; s++) substep(h, Wpx, s === 0, (s & 1) === 0);
     // Partikel außerhalb entfernen
     for (let i = S.n - 1; i >= 0; i--) {
       if (!(x[i] > -MARGIN + 4 && x[i] < W + MARGIN - 4 && y[i] < H + MARGIN - 4)) removeP(i);
@@ -417,14 +596,16 @@ function createSim(W, H) {
     S.balls = S.balls.filter(b => b.x > -100 && b.x < W + 100 && b.y < H + 100);
   };
 
-  function substep(h, Wpx, first) {
+  // rebuild: Gitter + Paarliste neu (jeder 2. Substep). Dazwischen wird die Liste weiterverwendet;
+  // der Suchradius hat dafür 2 px Reserve (Weg pro Substep typ. < 1 px).
+  function substep(h, Wpx, first, rebuild) {
     const n = S.n;
     // Pre-Stabilisierung (Macklin 2014): bestehende Überlappungen auflösen, OHNE daraus Geschwindigkeit zu machen.
     // Verhindert, dass Stapel "pumpen" und Körner/Tropfen hochgeschleudert werden.
-    if (S.preStab) {
+    if (S.preStab && S.nSand > 0) {
       buildGrid(); doFric = false;
       for (let i = 0; i < n; i++) { px[i] = x[i]; py[i] = y[i]; }
-      forPairs(pair, false);
+      forPairs(pairPre, false);
       for (let i = 0; i < n; i++) collideStrokesP(i);
       doFric = true;
     }
@@ -452,22 +633,38 @@ function createSim(W, H) {
       const kd = 6 / (b.dens * b.r);
       const wf = Wpx !== 0 ? windFactor(b.x, b.y - b.r * 0.5) : 0;
       b.vx += kd * (Wpx * wf - b.vx) * h * 0.5; b.vy += (G - kd * b.vy * 0.5) * h;
+      if (b.sub > 0.01) {
+        b.vy -= G * b.sub / b.dens * h;                                  // Archimedes: ρ_W·V_sub·g / m
+        const kw = Math.min(1, S.ballWaterDrag * b.sub / b.dens * h);       // Strömungswiderstand: mitgerissen vom Wasser
+        b.vx += (b.wvx - b.vx) * kw; b.vy += (b.wvy - b.vy) * kw;
+      }
       const v2 = b.vx * b.vx + b.vy * b.vy; if (v2 > vmax * vmax) { const f = vmax / Math.sqrt(v2); b.vx *= f; b.vy *= f; }
+      b.v0x = b.vx; b.v0y = b.vy;
       b.px = b.x; b.py = b.y; b.x += b.vx * h; b.y += b.vy * h; b.cn.length = 0;
     }
-    buildGrid();
-    solveParticles(first);
+    HH = S.HK * S.HK; IHK = 1 / S.HK; hh2 = h * h;
+    if (first) { nc.fill(0, 0, n); wet.fill(0, 0, n); }
+    if (rebuild || nPairsN !== n) { buildGrid(); buildPairs((S.HK + 2) * (S.HK + 2)); nPairsN = n; }   // alle Wechselwirkungen: Reichweite <= HK
+    for (let k = 0; k < nPairs; k++) pairAll(pI[k], pJ[k], first);
     collideBalls();
     for (let i = 0; i < n; i++) collideStrokesP(i);
     for (const b of S.balls) collideStrokesBall(b);
     // Geschwindigkeiten aus Positionen
     const ih = 1 / h;
     for (let i = 0; i < n; i++) { vx[i] = (x[i] - px[i]) * ih; vy[i] = (y[i] - py[i]) * ih; }
-    forPairs(visc, false);
+    rho.fill(0, 0, n); rhoN.fill(0, 0, n);
+    for (let k = 0; k < nPairs; k++) viscDens(pI[k], pJ[k]);
     for (const b of S.balls) {
       b.vx = (b.x - b.px) * ih; b.vy = (b.y - b.py) * ih;
+      // Restitution (Müller et al. 2020): Normalgeschwindigkeit vor dem Stoß umkehren und mit e skalieren
+      if (b.e > 0) for (let k = 0; k < b.cn.length; k += 3) {
+        const nx = b.cn[k], ny = b.cn[k + 1];
+        const vn0 = b.v0x * nx + b.v0y * ny; if (vn0 > -60) continue;     // nur echte Aufpralle, kein Ruhekontakt
+        const dv = -b.e * vn0 - (b.vx * nx + b.vy * ny);
+        if (dv > 0) { b.vx += nx * dv; b.vy += ny * dv; }
+      }
       // Haft-/Gleitreibung am Kontakt -> echtes Rollen (Vollkreis I = 1/2 m R²)
-      const MU = 0.6;
+      const MU = b.mu;
       for (let k = 0; k < b.cn.length; k += 3) {
         const nx = b.cn[k], ny = b.cn[k + 1], pen = b.cn[k + 2];
         const tx = -ny, ty = nx;
@@ -485,13 +682,106 @@ function createSim(W, H) {
   S.resize(W, H);
   return S;
 }
-if (typeof module !== 'undefined') module.exports = { createSim };
+// ===== Demo-Szenen =====
+// Jede Szene baut Striche/Bälle/Partikel in sim auf und liefert Metadaten:
+//   name, desc, rain (bool), emitters [{x,y,mat,rate,total,vx,vy,spread}], events [{t, run(sim)}]
+// top = Unterkante der Werkzeugleiste (darunter beginnt die nutzbare Fläche).
+const SCENES = [
+  // 1) Kaskade: überlaufende Becher, jede Stufe füllt sich und läuft in die nächste über
+  function kaskade(sim, W, H, top) {
+    const n = 4, a0 = W * 0.08, cw = W * 0.72 / (1 + 0.62 * (n - 1)), hgt = Math.min(H * 0.11, 110);
+    const y0 = top + H * 0.17, step = (H * 0.74 - y0) / (n - 1) + hgt * 0.05;
+    for (let i = 0; i < n; i++) {
+      const a = a0 + i * 0.62 * cw, yb = y0 + i * step;
+      sim.addStroke([[a, yb - hgt], [a + cw * 0.08, yb], [a + cw * 0.92, yb], [a + cw, yb - hgt * 0.55]]);
+      if (i % 2 === 1) sim.addBall(a + cw * 0.45, yb - hgt * 0.5, 13, 0.5);
+    }
+    const yb = H - 14;   // Auffangbecken mit hohen Wänden: Überlauf-Strahlen fliegen seitlich weit
+    sim.addStroke([[W * 0.02, top + 10], [W * 0.02, yb], [W * 0.98, yb], [W * 0.98, y0 + step]]);
+    return { name: 'Kaskade', desc: 'Jede Stufe füllt sich und läuft über die niedrigere Kante in die nächste.',
+      rain: false, emitters: [{ x: a0 + cw * 0.5, y: Math.max(top + 8, y0 - hgt - 50), mat: 0, rate: 240, total: Math.round(Math.min(4200, W * 0.96 * (yb - (y0 + (n - 1) * step) - 30) / sim.waterArea)), vx: 0, vy: 320, spread: Math.min(22, cw * 0.25) }] };
+  },
+
+  // 2) Trichter-Vergleich: Wasser (links) und Sand (rechts) durch die gleiche Engstelle
+  function trichter(sim, W, H, top) {
+    const g = 26, y0 = top + H * 0.06, y1 = top + H * 0.40, out = [];
+    for (const [cx, mat] of [[W * 0.27, 0], [W * 0.73, 1]]) {
+      const w = W * 0.38;
+      const L = [[cx - w / 2, y0], [cx - g / 2, y1], [cx - g / 2, y1 + 16]], R = [[cx + w / 2, y0], [cx + g / 2, y1], [cx + g / 2, y1 + 16]];
+      sim.addStroke(L); sim.addStroke(R);
+      const bt = y1 + H * 0.12, bb = H - 14;
+      sim.addStroke([[cx - w / 2, bt], [cx - w / 2, bb], [cx + w / 2, bb], [cx + w / 2, bt]]);
+      out.push({ cx, w, mat });
+    }
+    // nach dem Aufbau befüllen (Füllung prüft Abstand zu den Strichen)
+    return { name: 'Trichter: Wasser gegen Sand', desc: 'Gleiche Engstelle: Wasser läuft schneller, je höher es steht – Sand rieselt gleichmäßig und bildet einen Kegel.',
+      rain: false, emitters: [], events: [], fill: () => {
+        for (const f of out) sim.fillPoly(f.mat, [[f.cx - f.w / 2 + 4, y0 + 40], [f.cx + f.w / 2 - 4, y0 + 40], [f.cx + g / 2 - 2, y1 + 14], [f.cx - g / 2 + 2, y1 + 14]], 2000);
+      } };
+  },
+
+  // 3) Kommunizierende Röhren: verschieden geformte Kammern, unten verbunden – überall gleicher Pegel
+  function roehren(sim, W, H, top) {
+    const w = Math.min(W * 0.9, H * 1.1), x0 = (W - w) / 2, x1 = x0 + w, yt = top + H * 0.18, yb = H - 20, gap = Math.max(70, H * 0.12);   // im Querformat schmaler -> tieferes Wasser
+    sim.addStroke([[x0, yt], [x0, yb], [x1, yb], [x1, yt]]);
+    const p1 = x0 + w * 0.38, p2 = x0 + w * 0.52, p3 = x0 + w * 0.76;
+    sim.addStroke([[p1, yt], [p1, yb - gap]]);
+    sim.addStroke([[p2, yt], [p2, yb - gap]]);
+    sim.addStroke([[p3 + w * 0.08, yt], [p3 - w * 0.02, yb - gap]]);   // schräge Wand
+    sim.addBall((p1 + p2) / 2, yb - gap - 30, 13, 0.5);
+    return { name: 'Kommunizierende Röhren', desc: 'Eingefüllt wird nur links. Der Pegel ist in allen Kammern gleich – egal wie breit oder schief.',
+      rain: false, emitters: [{ x: x0 + w * 0.19, y: yt + 6, mat: 0, rate: 300, total: Math.min(3600, Math.round(w * (yb - yt) * 0.016)), vx: 0, vy: 320, spread: Math.min(24, w * 0.08) }] };
+  },
+
+  // 4) Dammbruch: Stausee hinter einem Tor, das Tor öffnet sich nach 1,5 s
+  function dammbruch(sim, W, H, top) {
+    const gy = H - 24, rw = Math.max(W * 0.34, 120), yt = top + H * 0.12;
+    sim.addStroke([[W * 0.02, yt], [W * 0.02, gy], [W * 0.55, gy], [W * 0.62, gy - 26], [W * 0.70, gy], [W * 0.98, gy], [W * 0.98, gy - H * 0.35]]);
+    const gate = sim.addStroke([[rw, yt + 30], [rw, gy - 7]]);
+    // kleine "Häuser" (offene Kästen) und Bälle im Tal
+    sim.addStroke([[W * 0.78, gy - 40], [W * 0.78, gy - 6]]);
+    sim.addStroke([[W * 0.88, gy - 40], [W * 0.88, gy - 6]]);
+    sim.addBall(W * 0.46, gy - 25, 18, 3);
+    sim.addBall(W * 0.83, gy - 20, 13, 0.5);
+    sim.addBall(W * 0.30, yt + 20, 13, 0.5);
+    return { name: 'Dammbruch', desc: 'Das Tor öffnet sich – die Flutwelle schwappt durchs Tal und kommt durch die Dämpfung zur Ruhe.',
+      rain: false, emitters: [], events: [{ t: 1.5, run: s => s.removeStroke(gate) }],
+      fill: () => sim.fillPoly(0, [[W * 0.02 + 8, yt + 40], [rw - 8, yt + 40], [rw - 8, gy - 8], [W * 0.02 + 8, gy - 8]], Math.round(sim.maxP * 0.9)) };
+  },
+
+  // 5) Schleuse: Oberwasser links, Schleusenkammer in der Mitte, Unterwasser rechts. Die Tore öffnen und
+  //    schließen sich im Wechsel – das "Boot" (leichter Ball) wird mit dem Pegel gehoben und gesenkt.
+  function schleuse(sim, W, H, top) {
+    const y0 = H - 18, yU = top + H * 0.50, gh = 30;
+    const xa = W * 0.03, xb = W * 0.36, xc = W * 0.66, xd = W * 0.97, yt = top + H * 0.10;
+    sim.addStroke([[xa, yt], [xa, yU], [xb, yU], [xb, y0], [xd, y0], [xd, y0 - H * 0.10]]);   // Oberwasser + Kammerboden + Unterwasser (läuft rechts über)
+    sim.addStroke([[xb, yt + H * 0.04], [xb, yU - gh - 8]]);                             // Oberhaupt (über dem Tor)
+    sim.addStroke([[xc, top + H * 0.28], [xc, y0 - gh - 8]]);                             // Unterhaupt (über dem Tor)
+    const gateU = [[xb, yU - gh - 8], [xb, yU]], gateL = [[xc, y0 - gh - 8], [xc, y0]];
+    let idU = sim.addStroke(gateU), idL = sim.addStroke(gateL);
+    sim.addBall((xb + xc) / 2, y0 - 60, Math.min(22, (xc - xb) * 0.18), 0.5);
+    // Torfolge: Oberes Tor auf -> Kammer füllt sich -> zu -> unteres Tor auf -> Kammer leert sich -> zu ...
+    const ev = [
+      { t: 2.0, run: s => { s.removeStroke(idU); } },
+      { t: 9.0, run: s => { idU = s.addStroke(gateU); } },
+      { t: 9.5, run: s => { s.removeStroke(idL); } },
+      { t: 15.0, run: s => { idL = s.addStroke(gateL); } },
+    ];
+    // Nachschub fürs Oberwasser; das Unterwasser läuft rechts über den Rand ab
+    return { name: 'Schleuse', desc: 'Oberes Tor auf: die Kammer füllt sich bis zum Oberwasser und hebt das Boot. Unteres Tor auf: sie leert sich bis zum Unterwasser.',
+      rain: false, events: ev, period: 14,
+      fill: () => sim.fillPoly(0, [[xa + 6, yt + H * 0.08], [xb - 6, yt + H * 0.08], [xb - 6, yU - 7], [xa + 6, yU - 7]], Math.round(sim.maxP * 0.5)),
+      emitters: [{ x: (xa + xb) / 2, y: yt, mat: 0, rate: 60, total: 1e9, vx: 0, vy: 200, spread: (xb - xa) * 0.3 }] };
+  },
+];
+if (typeof module !== 'undefined') module.exports = { createSim, SCENES };
 
 </script>
 <script>
 (() => {
   const cv = document.getElementById('cv');
   const ctx = cv.getContext('2d');
+  const $ = id => document.getElementById(id);
   let DPR = Math.min(window.devicePixelRatio || 1, 2);
   let W = window.innerWidth, H = window.innerHeight;
   const sim = createSim(W, H);
@@ -503,29 +793,124 @@ if (typeof module !== 'undefined') module.exports = { createSim };
     sim.resize(W, H);
   }
   window.addEventListener('resize', resize); resize();
+  const barBottom = () => $('bar').getBoundingClientRect().bottom;
 
-  // ---------- UI-Zustand ----------
-  const ui = { tool: 'draw', mat: 0, rain: true, rate: 150, paused: false, debug: false };
+  // ---------- Einstellungen (persistent, falls der Browser es erlaubt) ----------
+  const DEFAULTS = { maxP: 5000, auto: true, damp: 50, sub: 8, rate: 150, wind: 0, gust: true, bdens: 0.5, bsize: 22, hud: false, debug: false, mat: 0 };
+  const KEY = 'drawflow.settings.v1';
+  let set = { ...DEFAULTS };
+  try { Object.assign(set, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) { /* privat/gesperrt */ }
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(set)); } catch (e) { } };
+
+  const ui = { tool: 'draw', rain: true, paused: false };
   const undo = [];
-  const $ = id => document.getElementById(id);
+
+  function apply() {
+    sim.setDamping(set.damp / 100);
+    sim.setSub(set.sub);
+    sim.wind = set.wind; sim.gusts = set.gust;
+    if (!set.auto || sim.maxP > set.maxP) sim.maxP = set.maxP;
+    // Oberfläche
+    $('maxP').value = set.maxP; $('maxPv').textContent = set.maxP.toLocaleString('de-DE');
+    $('auto').checked = set.auto;
+    $('damp').value = set.damp; $('dampv').textContent = set.damp + ' %';
+    $('rate').value = set.rate; $('ratev').textContent = set.rate + ' /s';
+    $('wind').value = set.wind; $('windv').textContent = (set.wind > 0 ? '→ ' : set.wind < 0 ? '← ' : '') + Math.abs(set.wind) + ' m/s';
+    $('gust').checked = set.gust; $('hudOn').checked = set.hud; $('dbg').checked = set.debug;
+    $('hud').style.display = set.hud ? 'block' : 'none';
+    for (const [id, v] of [['sub', set.sub], ['bdens', set.bdens], ['bsize', set.bsize]])
+      $(id).querySelectorAll('button').forEach(b => b.classList.toggle('on', +b.dataset.v === v));
+    $('matIcon').innerHTML = set.mat === 0
+      ? '<path d="M12 3.5c3.2 4.2 5.6 7.2 5.6 10a5.6 5.6 0 0 1-11.2 0c0-2.8 2.4-5.8 5.6-10z"/>'
+      : '<circle cx="7" cy="17" r="1.6"/><circle cx="12" cy="17" r="1.6"/><circle cx="17" cy="17" r="1.6"/><circle cx="9.5" cy="12.6" r="1.6"/><circle cx="14.5" cy="12.6" r="1.6"/><circle cx="12" cy="8.2" r="1.6"/>';
+    $('mat').title = 'Material: ' + (set.mat === 0 ? 'Wasser' : 'Sand');
+    save();
+  }
+  const bindRange = (id, key) => $(id).addEventListener('input', e => {
+    set[key] = +e.target.value;
+    if (key === 'maxP' && set.auto) sim.maxP = set.maxP;    // neues Maximum: optimistisch starten, Auto regelt nach unten
+    apply();
+  });
+  bindRange('maxP', 'maxP'); bindRange('damp', 'damp'); bindRange('rate', 'rate'); bindRange('wind', 'wind');
+  const bindCheck = (id, key) => $(id).addEventListener('change', e => { set[key] = e.target.checked; if (key === 'auto' && set.auto) sim.maxP = set.maxP; apply(); });
+  bindCheck('auto', 'auto'); bindCheck('gust', 'gust'); bindCheck('hudOn', 'hud'); bindCheck('dbg', 'debug');
+  for (const id of ['sub', 'bdens', 'bsize']) $(id).addEventListener('click', e => { const b = e.target.closest('button'); if (b) { set[id] = +b.dataset.v; apply(); } });
+  $('defaults').onclick = () => { set = { ...DEFAULTS, mat: set.mat }; sim.maxP = set.maxP; apply(); };
+
+  // ---------- Werkzeugleiste ----------
   document.querySelectorAll('[data-tool]').forEach(b => b.onclick = () => {
     ui.tool = b.dataset.tool;
     document.querySelectorAll('[data-tool]').forEach(o => o.classList.toggle('on', o === b));
   });
-  $('mat').onchange = e => ui.mat = +e.target.value;
-  $('rain').onclick = e => { ui.rain = !ui.rain; e.target.classList.toggle('on', ui.rain); };
-  $('rate').oninput = e => ui.rate = +e.target.value;
-  $('wind').oninput = e => { sim.wind = +e.target.value; $('windv').textContent = sim.wind + ' m/s'; };
-  $('gust').onchange = e => sim.gusts = e.target.checked;
+  $('mat').onclick = () => { set.mat = 1 - set.mat; apply(); toast(set.mat === 0 ? '<b>Wasser</b>' : '<b>Sand</b>', 1200); };
+  function setRain(on) { ui.rain = on; $('rain').classList.toggle('on', on); }
+  $('rain').onclick = () => setRain(!ui.rain);
   $('undo').onclick = () => {
     const a = undo.pop(); if (!a) return;
     if (a.t === 's') sim.removeStroke(a.id); else sim.balls = sim.balls.filter(b => b !== a.b);
   };
-  $('clearP').onclick = () => sim.clearParticles();
-  $('reset').onclick = () => { sim.clearParticles(); sim.balls = []; for (const s of [...sim.strokes]) sim.removeStroke(s.id); undo.length = 0; };
-  $('pause').onclick = e => { ui.paused = !ui.paused; e.target.textContent = ui.paused ? '▶ Weiter' : '⏸ Pause'; };
-  $('dbg').onclick = e => { ui.debug = !ui.debug; e.target.classList.toggle('on', ui.debug); };
-  $('scene').onclick = demoScene;
+  function setPaused(p) {
+    ui.paused = p;
+    $('pauseIcon').innerHTML = p ? '<path d="M8 5l11 7-11 7z"/>' : '<path d="M9 5v14M15 5v14"/>';
+    $('pause').classList.toggle('on', p); $('pause').title = p ? 'Weiter' : 'Pause';
+  }
+  $('pause').onclick = () => setPaused(!ui.paused);
+  const sheet = $('sheet');
+  $('gear').onclick = () => { const o = !sheet.classList.contains('open'); sheet.classList.toggle('open', o); $('gear').classList.toggle('on', o); };
+  $('close').onclick = () => { sheet.classList.remove('open'); $('gear').classList.remove('on'); };
+  $('clearP').onclick = () => { sim.clearParticles(); scene = null; };
+  $('reset').onclick = resetAll;
+  function resetAll() { sim.clearParticles(); sim.balls = []; for (const s of [...sim.strokes]) sim.removeStroke(s.id); undo.length = 0; scene = null; }
+
+  // ---------- Hinweis-Toast ----------
+  let toastT = 0;
+  function toast(html, ms) {
+    const t = $('toast'); t.innerHTML = html; t.classList.add('show');
+    clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), ms || 4000);
+  }
+
+  // ---------- Demo-Szenen (5 Stück, Taste schaltet reihum weiter) ----------
+  let sceneIdx = -1, scene = null;
+  function loadScene(k) {
+    resetAll();
+    sceneIdx = (k + SCENES.length) % SCENES.length;
+    const nS = sim.strokes.length, nB = sim.balls.length;
+    const m = SCENES[sceneIdx](sim, W, H, barBottom());
+    if (m.fill) m.fill();
+    for (const s of sim.strokes.slice(nS)) undo.push({ t: 's', id: s.id });
+    for (const b of sim.balls.slice(nB)) undo.push({ t: 'b', b });
+    setRain(!!m.rain);
+    scene = { t: 0, period: m.period || 0, emitters: (m.emitters || []).map(e => ({ ...e, acc: 0, done: 0 })), events: (m.events || []).map(e => ({ ...e })) };
+    $('sceneNo').textContent = (sceneIdx + 1) + '/' + SCENES.length;
+    toast(`<b>${sceneIdx + 1}/${SCENES.length} · ${m.name}</b><small>${m.desc}</small>`, 6500);
+  }
+  $('scene').onclick = () => loadScene(sceneIdx + 1);
+
+  function runScene(dt) {
+    if (!scene) return;
+    scene.t += dt;
+    for (const e of scene.emitters) {
+      if (e.done >= e.total) continue;
+      e.acc = Math.min(e.acc + e.rate * dt, e.rate * 0.1 + 1);   // kein Stau-Schwall, wenn Platz kurz belegt war
+      while (e.acc >= 1 && e.done < e.total) {
+        e.acc -= 1;
+        if (e.mat !== undefined && sim.n >= sim.maxP) break;   // Budget voll
+        let ok = false;
+        for (let tries = 0; tries < 4 && !ok; tries++) {     // freien Platz an der Quelle suchen
+          const X = e.x + (Math.random() * 2 - 1) * (e.spread || 0), Y = e.y + Math.random() * 10;
+          if (e.ball) { if (sim.isFree(X, Y, e.r)) { sim.addBall(X, Y, e.r, e.dens, e.e); ok = true; } }
+          else if (sim.isFree(X, Y, 3) && sim.addParticle(e.mat, X, Y, e.vx || 0, e.vy || 0) >= 0) ok = true;
+        }
+        if (!ok) break;                              // Quelle verstopft: nächstes Bild weiter
+        e.done++;
+      }
+    }
+    for (const ev of scene.events) {
+      if (ev.done || scene.t < ev.t) continue;
+      ev.run(sim);
+      if (scene.period) ev.t += scene.period; else ev.done = true;
+    }
+  }
 
   // ---------- Strichverarbeitung ----------
   function chaikin(p) {
@@ -557,20 +942,20 @@ if (typeof module !== 'undefined') module.exports = { createSim };
     // Schließen, wenn Ende nah am Anfang (verhindert Mini-Lücken)
     const s = p[0], e = p[p.length - 1];
     if (p.length > 3 && len > 60 && Math.hypot(s[0] - e[0], s[1] - e[1]) < 20) p[p.length - 1] = [s[0], s[1]];
-    const id = sim.addStroke(p);
-    undo.push({ t: 's', id });
+    undo.push({ t: 's', id: sim.addStroke(p) });
   }
 
   // ---------- Eingabe ----------
   let drawing = null, pointer = { x: 0, y: 0, down: false };
   cv.addEventListener('pointerdown', e => {
+    if (sheet.classList.contains('open') && window.innerWidth < 760) { $('close').onclick(); return; }   // Tippen neben das Menü schließt es
     cv.setPointerCapture(e.pointerId);
     pointer = { x: e.clientX, y: e.clientY, down: true };
     if (ui.tool === 'draw') drawing = [[e.clientX, e.clientY]];
     else if (ui.tool === 'erase') eraseAt(e.clientX, e.clientY);
     else if (ui.tool === 'ball') {
-      const R = +$('bsize').value;
-      if (sim.isFree(e.clientX, e.clientY, R)) { sim.addBall(e.clientX, e.clientY, R, +$('bdens').value); undo.push({ t: 'b', b: sim.balls[sim.balls.length - 1] }); }
+      const R = set.bsize;
+      if (sim.isFree(e.clientX, e.clientY, R)) { sim.addBall(e.clientX, e.clientY, R, set.bdens); undo.push({ t: 'b', b: sim.balls[sim.balls.length - 1] }); }
     }
   });
   cv.addEventListener('pointermove', e => {
@@ -592,40 +977,21 @@ if (typeof module !== 'undefined') module.exports = { createSim };
     sim.balls = sim.balls.filter(b => Math.hypot(b.x - X, b.y - Y) > b.r + 10);
   }
 
-  // ---------- Demo-Szene ----------
-  function demoScene() {
-    $('reset').onclick();
-    const u = [[W * 0.08, H * 0.35], [W * 0.08, H * 0.6]];
-    for (let a = 1; a < 16; a++) { const t = Math.PI * a / 16; u.push([W * 0.18 - W * 0.10 * Math.cos(t), H * 0.6 + H * 0.08 * Math.sin(t)]); }
-    u.push([W * 0.28, H * 0.6], [W * 0.28, H * 0.35]);
-    undo.push({ t: 's', id: sim.addStroke(u) });
-    undo.push({ t: 's', id: sim.addStroke([[W * 0.33, H * 0.25], [W * 0.62, H * 0.55]]) });                  // Schräge
-    undo.push({ t: 's', id: sim.addStroke([[W * 0.60, H * 0.75], [W * 0.98, H * 0.75]]) });                  // Boden rechts
-    // Becher mit Lücke unten
-    undo.push({ t: 's', id: sim.addStroke([[W * 0.70, H * 0.35], [W * 0.75, H * 0.55], [W * 0.785, H * 0.55]]) });
-    undo.push({ t: 's', id: sim.addStroke([[W * 0.805, H * 0.55], [W * 0.84, H * 0.55], [W * 0.89, H * 0.35]]) });
-    // geschlossener Kreis
-    const o = []; for (let a = 0; a <= 24; a++) { const t = 2 * Math.PI * a / 24; o.push([W * 0.45 + 45 * Math.cos(t), H * 0.80 + 45 * Math.sin(t)]); }
-    undo.push({ t: 's', id: sim.addStroke(o) });
-    sim.addBall(W * 0.36, H * 0.25 - 40, 22, 3); undo.push({ t: 'b', b: sim.balls[sim.balls.length - 1] });
-    sim.addBall(W * 0.18, H * 0.30, 22, 0.5); undo.push({ t: 'b', b: sim.balls[sim.balls.length - 1] });
-  }
-
-  // ---------- Emitter ----------
+  // ---------- Emitter (Regen, Schütten) ----------
   let rainAcc = 0;
   function emit(dt) {
-    if (ui.rain && ui.rate > 0) {
-      rainAcc += ui.rate * dt;
+    if (ui.rain && set.rate > 0) {
+      rainAcc += set.rate * dt;
       while (rainAcc >= 1) {
         rainAcc -= 1;
-        sim.addParticle(ui.mat, Math.random() * W, -4 - Math.random() * 16, sim.windNow * sim.PPM * 0.5, 300 + Math.random() * 100);
+        sim.addParticle(set.mat, Math.random() * W, -4 - Math.random() * 16, sim.windNow * sim.PPM * 0.5, 300 + Math.random() * 100);
       }
     }
     if (ui.tool === 'pour' && pointer.down) {
       for (let k = 0; k < 6; k++) {
         const a = Math.random() * Math.PI * 2, rr = Math.random() * 12;
         const X = pointer.x + Math.cos(a) * rr, Y = pointer.y + Math.sin(a) * rr;
-        if (sim.isFree(X, Y, 3)) sim.addParticle(ui.mat, X, Y, 0, 60);
+        if (sim.isFree(X, Y, 3)) sim.addParticle(set.mat, X, Y, 0, 60);
       }
     }
   }
@@ -640,7 +1006,6 @@ if (typeof module !== 'undefined') module.exports = { createSim };
     const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#16324f'); g.addColorStop(1, '#0d1b2a');
     ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
 
-    // Wind
     if (Math.abs(sim.windNow) > 0.2) {
       ctx.strokeStyle = 'rgba(200,230,255,0.18)'; ctx.lineWidth = 1; ctx.beginPath();
       for (const s of streaks) {
@@ -651,21 +1016,20 @@ if (typeof module !== 'undefined') module.exports = { createSim };
     }
 
     const P = sim.p, n = sim.n;
-    // Wasser: weiche, überlappende Kreise -> zusammenhängende Fläche
-    ctx.fillStyle = 'rgba(40,150,255,0.55)'; ctx.beginPath();
-    for (let i = 0; i < n; i++) if (P.type[i] === 0) { const rr = P.r[i] * 1.9; ctx.moveTo(P.x[i] + rr, P.y[i]); ctx.arc(P.x[i], P.y[i], rr, 0, 6.2832); }
+    // Wasser: große, überlappende Kreise in einem Pfad -> geschlossene Fläche (Ruheabstand ~7 px),
+    // darüber feine helle Punkte für Struktur; freie Tropfen (wenige Nachbarn) heller
+    ctx.fillStyle = 'rgb(28,120,215)'; ctx.beginPath();
+    for (let i = 0; i < n; i++) if (P.type[i] === 0) { const rr = P.r[i] * 1.75; ctx.moveTo(P.x[i] + rr, P.y[i]); ctx.arc(P.x[i], P.y[i], rr, 0, 6.2832); }
     ctx.fill();
-    ctx.fillStyle = 'rgba(120,200,255,0.9)'; ctx.beginPath();
-    for (let i = 0; i < n; i++) if (P.type[i] === 0) { const rr = P.r[i] * 1.05; ctx.moveTo(P.x[i] + rr, P.y[i]); ctx.arc(P.x[i], P.y[i], rr, 0, 6.2832); }
+    ctx.fillStyle = 'rgba(140,210,255,0.35)'; ctx.beginPath();
+    for (let i = 0; i < n; i++) if (P.type[i] === 0) { const rr = P.nc[i] <= 2 ? P.r[i] * 1.1 : P.r[i] * 0.7; ctx.moveTo(P.x[i] + rr, P.y[i]); ctx.arc(P.x[i], P.y[i], rr, 0, 6.2832); }
     ctx.fill();
-    // Sand: drei Farbtöne für Körnung
     for (let c = 0; c < 3; c++) {
       ctx.fillStyle = sandCols[c]; ctx.beginPath();
       for (let i = 0; i < n; i++) if (P.type[i] === 1 && Math.floor(P.shade[i] * 3) === c) { const rr = P.r[i] * 1.15; ctx.rect(P.x[i] - rr, P.y[i] - rr, rr * 2, rr * 2); }
       ctx.fill();
     }
 
-    // Striche
     ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.lineWidth = RS * 2; ctx.strokeStyle = '#e8eef5';
     for (const s of sim.strokes) {
       ctx.beginPath(); ctx.moveTo(s.pts[0][0], s.pts[0][1]);
@@ -680,39 +1044,48 @@ if (typeof module !== 'undefined') module.exports = { createSim };
     for (const b of sim.balls) {
       ctx.fillStyle = b.dens < 1 ? '#ff9f1c' : '#c0392b';
       ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, 6.2832); ctx.fill();
-      ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.beginPath();
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = Math.max(1.5, b.r * 0.14); ctx.beginPath();
       ctx.moveTo(b.x, b.y); ctx.lineTo(b.x + Math.cos(b.ang) * b.r * 0.9, b.y + Math.sin(b.ang) * b.r * 0.9); ctx.stroke();
     }
-    // Werkzeug-Cursor
     if (ui.tool === 'erase' || ui.tool === 'pour') {
       ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 1; ctx.beginPath();
-      ctx.arc(pointer.x, pointer.y, ui.tool === 'erase' ? 12 : 12, 0, 6.2832); ctx.stroke();
+      ctx.arc(pointer.x, pointer.y, 12, 0, 6.2832); ctx.stroke();
     }
-    if (ui.debug) {
+    if (set.debug) {
       ctx.fillStyle = '#ff0'; for (let i = 0; i < n; i++) if (P.nc[i] <= 1) ctx.fillRect(P.x[i] - 1, P.y[i] - 1, 2, 2);
     }
   }
 
   // ---------- Hauptschleife: feste Schrittweite, adaptives Partikelbudget ----------
-  const DT = 1 / 60; let acc = 0, last = performance.now(), stepMs = 0, fps = 60;
+  const DT = 1 / 60; let acc = 0, last = performance.now(), stepMs = 0, fps = 60, hudT = 0;
   function loop(now) {
     const frame = Math.min(0.1, (now - last) / 1000); last = now; fps = fps * 0.95 + (1 / Math.max(frame, 1e-3)) * 0.05;
     if (!ui.paused) {
       acc += frame; let steps = 0;
       while (acc >= DT && steps < 2) {
-        emit(DT);
+        emit(DT); runScene(DT);
         const t0 = performance.now(); sim.step(DT); stepMs = stepMs * 0.9 + (performance.now() - t0) * 0.1;
         acc -= DT; steps++;
       }
       if (acc > DT) acc = 0;   // Gerät zu langsam: Zeit verwerfen statt "Spiral of Death"
-      if (stepMs > 12 && sim.maxP > 800) sim.maxP -= 20;
-      else if (stepMs < 7 && sim.maxP < 5000 && sim.n > sim.maxP - 50) sim.maxP += 20;
+      if (set.auto) {
+        // Budget nachführen: Rechenzeit pro Schritt < ~12 ms halten (Puffer fürs Zeichnen)
+        // und die Bildrate über ~35 FPS (Zeichnen kostet bei vielen Tropfen ebenfalls)
+        if ((stepMs > 13 || fps < 35) && sim.maxP > 800 && sim.n > sim.maxP * 0.8) sim.maxP = Math.max(800, Math.round(sim.maxP * 0.995));
+        else if (stepMs < 8 && fps > 50 && sim.maxP < set.maxP && sim.n > sim.maxP - 50) sim.maxP = Math.min(set.maxP, sim.maxP + 25);
+      }
     }
     render();
-    $('hud').textContent = `FPS ${fps.toFixed(0)}  Schritt ${stepMs.toFixed(1)} ms\nPartikel ${sim.n} / Budget ${sim.maxP}\nWind aktuell ${sim.windNow.toFixed(1)} m/s  Bälle ${sim.balls.length}`;
+    if (now - hudT > 250) {
+      hudT = now;
+      $('budget').textContent = set.auto ? `Gerade: ${sim.n} Partikel, Budget ${sim.maxP.toLocaleString('de-DE')}.` : `Gerade: ${sim.n} Partikel.`;
+      if (set.hud) $('hud').textContent = `FPS ${fps.toFixed(0)}  Schritt ${stepMs.toFixed(1)} ms\nPartikel ${sim.n} / ${sim.maxP}\nWind ${sim.windNow.toFixed(1)} m/s  Bälle ${sim.balls.length}`;
+    }
     requestAnimationFrame(loop);
   }
-  demoScene();
+  apply();
+  sim.maxP = set.maxP;
+  loadScene(0);
   requestAnimationFrame(loop);
 })();
 </script>
