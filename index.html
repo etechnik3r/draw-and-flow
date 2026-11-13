@@ -1,0 +1,720 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Draw &amp; Flow – Physik-Demo</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0d1b2a; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+  canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; touch-action: none; display: block; }
+  #bar { position: fixed; left: 0; right: 0; top: 0; display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+         padding: 6px 8px; background: rgba(0, 30, 80, .82); color: #fff; font-size: 13px; z-index: 2; user-select: none; }
+  #bar .grp { display: flex; gap: 4px; align-items: center; padding-right: 8px; border-right: 1px solid rgba(255,255,255,.2); }
+  #bar .grp:last-child { border-right: 0; }
+  button { background: #1f3f6b; color: #fff; border: 1px solid #3c6496; border-radius: 6px; padding: 5px 9px; font-size: 13px; cursor: pointer; }
+  button.on { background: #00b0f0; border-color: #7fd8ff; color: #001e50; font-weight: 600; }
+  button:hover { filter: brightness(1.15); }
+  input[type=range] { width: 90px; }
+  select { background: #1f3f6b; color: #fff; border: 1px solid #3c6496; border-radius: 6px; padding: 4px; }
+  #hud { position: fixed; right: 8px; bottom: 8px; color: #cfe8ff; font: 12px ui-monospace, Consolas, monospace; background: rgba(0,0,0,.45);
+         padding: 6px 8px; border-radius: 6px; z-index: 2; white-space: pre; pointer-events: none; }
+  #help { position: fixed; left: 8px; bottom: 8px; color: #cfe8ff; font-size: 12px; background: rgba(0,0,0,.45); padding: 6px 8px; border-radius: 6px; z-index: 2; max-width: 420px; }
+  #help b { color: #fff; }
+</style>
+</head>
+<body>
+<canvas id="cv"></canvas>
+<div id="bar">
+  <div class="grp">
+    <button data-tool="draw" class="on" title="Striche zeichnen">✏️ Zeichnen</button>
+    <button data-tool="erase" title="Striche und Bälle löschen">🧽 Radieren</button>
+    <button data-tool="ball" title="Ball setzen">⚽ Ball</button>
+    <button data-tool="pour" title="Material an der Zeigerposition schütten">🫗 Schütten</button>
+  </div>
+  <div class="grp">
+    Material
+    <select id="mat"><option value="0">💧 Wasser</option><option value="1">🟫 Sand</option></select>
+  </div>
+  <div class="grp">
+    <button id="rain" class="on">🌧️ Regen</button>
+    <input id="rate" type="range" min="0" max="400" value="150" title="Partikel pro Sekunde">
+  </div>
+  <div class="grp">
+    💨 Wind <input id="wind" type="range" min="-12" max="12" step="0.5" value="0"> <span id="windv">0 m/s</span>
+    <label><input id="gust" type="checkbox" checked> Böen</label>
+  </div>
+  <div class="grp">
+    Ball
+    <select id="bdens"><option value="0.5">leicht (schwimmt)</option><option value="3">schwer (sinkt)</option></select>
+    <select id="bsize"><option value="14">klein</option><option value="22" selected>mittel</option><option value="34">groß</option></select>
+  </div>
+  <div class="grp">
+    <button id="undo">↶ Rückgängig</button>
+    <button id="clearP">Partikel leeren</button>
+    <button id="scene">Demo-Szene</button>
+    <button id="reset">Alles löschen</button>
+    <button id="pause">⏸ Pause</button>
+    <button id="dbg">Debug</button>
+  </div>
+</div>
+<div id="hud"></div>
+<div id="help"><b>Zeichne</b> mit Maus oder Finger: ein U fängt Wasser, eine Schräge leitet ab, ein Ball rollt.
+Das Verhalten ergibt sich aus der Simulation, nicht aus einer Formerkennung. Maßstab: 1 m = 250 px.</div>
+
+<script>
+// ===== Physik-Kern (ohne Abhängigkeiten) =====
+// Einheiten: Pixel und Sekunden. Maßstab: 1 m = PPM px.
+function createSim(W, H) {
+  const S = {};
+  const MAXP = 6000;
+  const PPM = 250;
+  const G = 9.81 * PPM;
+  const SUB = 4;            // Substeps pro Frame
+  const RS = 5;             // Strichradius (halbe Dicke) in px
+  const CELL = 8;           // Partikelgitter
+  const SCELL = 32;         // Strichgitter
+  const MARGIN = 64;
+
+  // Materialien: dens = relative Dichte, mu = Reibung Partikel-Partikel,
+  // wallMu = Reibung an Strichen, drag = Luftwiderstand [1/s]
+  const MAT = [
+    { name: 'Wasser', dens: 1.0, muS: 0.0, muK: 0.0, wallMu: 0.03, drag: 2.0, r: 3.0, rj: 0.12 },
+    { name: 'Sand',   dens: 1.6, muS: 0.8, muK: 0.6, wallMu: 0.9, drag: 2.5, r: 2.6, rj: 0.2 },
+  ];
+  S.MAT = MAT; S.shock = 0.6; S.preStab = true; S.PPM = PPM; S.RS = RS;
+
+  // --- Partikel (Structure of Arrays) ---
+  const x = new Float32Array(MAXP), y = new Float32Array(MAXP);
+  const px = new Float32Array(MAXP), py = new Float32Array(MAXP);
+  const vx = new Float32Array(MAXP), vy = new Float32Array(MAXP);
+  const r = new Float32Array(MAXP), im = new Float32Array(MAXP);
+  const type = new Uint8Array(MAXP), nc = new Uint8Array(MAXP), wet = new Uint8Array(MAXP), shade = new Float32Array(MAXP);
+  S.p = { x, y, vx, vy, r, type, shade, nc };
+  S.n = 0;
+  S.maxP = 3000;
+
+  // --- Bälle ---
+  S.balls = [];
+
+  // --- Striche ---
+  S.strokes = [];       // {id, pts:[[x,y],...]}
+  let segAx = new Float32Array(0), segAy = segAx, segBx = segAx, segBy = segAx;
+  let nSeg = 0;
+  let sgCols = 0, sgRows = 0, segGrid = [];
+  let nextId = 1;
+
+  // --- Wind ---
+  S.wind = 0;           // m/s, + = nach rechts
+  S.gusts = true;
+  S.windNow = 0;
+  let time = 0;
+  const WC = 16;        // Windschattengitter
+  let wCols = 0, wRows = 0, occ = null, shelter = null, shelterSign = 0, shelterDirty = true;
+
+  // --- Partikelgitter ---
+  let gCols, gRows, cellStart, cellCount, cellIdx = new Int32Array(MAXP), pCell = new Int32Array(MAXP);
+
+  S.resize = function (w, h) {
+    W = w; H = h; S.W = w; S.H = h;
+    gCols = Math.ceil((W + 2 * MARGIN) / CELL); gRows = Math.ceil((H + 2 * MARGIN) / CELL);
+    cellStart = new Int32Array(gCols * gRows + 1); cellCount = new Int32Array(gCols * gRows);
+    rebuildSegments();
+  };
+
+  // ================= Striche =================
+  function rebuildSegments() {
+    nSeg = 0;
+    for (const s of S.strokes) nSeg += s.pts.length - 1;
+    segAx = new Float32Array(nSeg); segAy = new Float32Array(nSeg); segBx = new Float32Array(nSeg); segBy = new Float32Array(nSeg);
+    let k = 0;
+    for (const s of S.strokes) for (let i = 0; i < s.pts.length - 1; i++) {
+      segAx[k] = s.pts[i][0]; segAy[k] = s.pts[i][1]; segBx[k] = s.pts[i + 1][0]; segBy[k] = s.pts[i + 1][1]; k++;
+    }
+    sgCols = Math.ceil((W + 2 * MARGIN) / SCELL); sgRows = Math.ceil((H + 2 * MARGIN) / SCELL);
+    segGrid = new Array(sgCols * sgRows);
+    for (let i = 0; i < segGrid.length; i++) segGrid[i] = [];
+    const pad = RS + 4 + 10;
+    for (let s = 0; s < nSeg; s++) {
+      const c0 = sgc(Math.min(segAx[s], segBx[s]) - pad), c1 = sgc(Math.max(segAx[s], segBx[s]) + pad);
+      const r0 = sgr(Math.min(segAy[s], segBy[s]) - pad), r1 = sgr(Math.max(segAy[s], segBy[s]) + pad);
+      for (let rr = r0; rr <= r1; rr++) for (let cc = c0; cc <= c1; cc++) segGrid[rr * sgCols + cc].push(s);
+    }
+    shelterDirty = true;
+  }
+  function sgc(v) { return Math.max(0, Math.min(sgCols - 1, Math.floor((v + MARGIN) / SCELL))); }
+  function sgr(v) { return Math.max(0, Math.min(sgRows - 1, Math.floor((v + MARGIN) / SCELL))); }
+
+  S.addStroke = function (pts) {
+    const s = { id: nextId++, pts };
+    S.strokes.push(s);
+    rebuildSegments();
+    // Partikel, die jetzt in der Wand liegen, entfernen (sonst "explodiert" das Wasser)
+    for (let i = S.n - 1; i >= 0; i--) {
+      for (let k = 0; k < pts.length - 1; k++) {
+        if (distSeg(x[i], y[i], pts[k][0], pts[k][1], pts[k + 1][0], pts[k + 1][1]) < RS + r[i]) { removeP(i); break; }
+      }
+    }
+    return s.id;
+  };
+  S.removeStroke = function (id) {
+    S.strokes = S.strokes.filter(s => s.id !== id); rebuildSegments();
+  };
+  S.strokeAt = function (qx, qy, rad) {
+    for (let j = S.strokes.length - 1; j >= 0; j--) {
+      const p = S.strokes[j].pts;
+      for (let k = 0; k < p.length - 1; k++) if (distSeg(qx, qy, p[k][0], p[k][1], p[k + 1][0], p[k + 1][1]) < rad + RS) return S.strokes[j].id;
+    }
+    return 0;
+  };
+  function distSeg(qx, qy, ax, ay, bx, by) {
+    const abx = bx - ax, aby = by - ay; const l2 = abx * abx + aby * aby;
+    let t = l2 > 0 ? ((qx - ax) * abx + (qy - ay) * aby) / l2 : 0; t = t < 0 ? 0 : t > 1 ? 1 : t;
+    const dx = qx - (ax + t * abx), dy = qy - (ay + t * aby); return Math.sqrt(dx * dx + dy * dy);
+  }
+
+  // ================= Partikel verwalten =================
+  S.addParticle = function (t, X, Y, VX, VY) {
+    if (S.n >= S.maxP) return -1;
+    const i = S.n++; const m = MAT[t];
+    const rad = m.r * (1 + (Math.random() * 2 - 1) * m.rj);   // Größenstreuung verhindert Kristallgitter
+    x[i] = px[i] = X; y[i] = py[i] = Y; vx[i] = VX; vy[i] = VY; r[i] = rad; type[i] = t;
+    im[i] = 1 / (m.dens * Math.PI * rad * rad); nc[i] = 0; shade[i] = Math.random();
+    return i;
+  };
+  function removeP(i) {
+    const l = --S.n; if (i === l) return;
+    x[i] = x[l]; y[i] = y[l]; px[i] = px[l]; py[i] = py[l]; vx[i] = vx[l]; vy[i] = vy[l];
+    r[i] = r[l]; im[i] = im[l]; type[i] = type[l]; nc[i] = nc[l]; shade[i] = shade[l];
+  }
+  S.clearParticles = function (t) {
+    for (let i = S.n - 1; i >= 0; i--) if (t === undefined || type[i] === t) removeP(i);
+  };
+  // freier Platz? (für Schütten ohne Druckexplosion)
+  S.isFree = function (X, Y, rad) {
+    const c0 = Math.max(0, Math.floor((X - rad - 4 + MARGIN) / CELL)), c1 = Math.min(gCols - 1, Math.floor((X + rad + 4 + MARGIN) / CELL));
+    const r0 = Math.max(0, Math.floor((Y - rad - 4 + MARGIN) / CELL)), r1 = Math.min(gRows - 1, Math.floor((Y + rad + 4 + MARGIN) / CELL));
+    for (let rr = r0; rr <= r1; rr++) for (let cc = c0; cc <= c1; cc++) {
+      const cell = rr * gCols + cc;
+      for (let q = cellStart[cell]; q < cellStart[cell + 1]; q++) { const i = cellIdx[q]; if (i >= S.n) continue; const dx = x[i] - X, dy = y[i] - Y; if (dx * dx + dy * dy < (rad + r[i]) ** 2) return false; }
+    }
+    for (const b of S.balls) { const dx = b.x - X, dy = b.y - Y; if (dx * dx + dy * dy < (rad + b.r) ** 2) return false; }
+    const sc = segGrid[sgr(Y) * sgCols + sgc(X)];
+    for (const s of sc) if (distSeg(X, Y, segAx[s], segAy[s], segBx[s], segBy[s]) < RS + rad) return false;
+    return true;
+  };
+  S.addBall = function (X, Y, R, dens) {
+    const m = dens * Math.PI * R * R;
+    S.balls.push({ x: X, y: Y, px: X, py: Y, vx: 0, vy: 0, r: R, dens, m, im: 1 / m, I: 0.5 * m * R * R, w: 0, ang: 0, cn: [] });
+  };
+
+  // ================= Wind =================
+  function rebuildShelter(sign) {
+    wCols = Math.ceil(W / WC) + 1; wRows = Math.ceil(H / WC) + 1;
+    occ = new Uint8Array(wCols * wRows); shelter = new Float32Array(wCols * wRows);
+    for (let s = 0; s < nSeg; s++) {
+      const len = Math.hypot(segBx[s] - segAx[s], segBy[s] - segAy[s]); const steps = Math.max(1, Math.ceil(len / 4));
+      for (let k = 0; k <= steps; k++) {
+        const qx = segAx[s] + (segBx[s] - segAx[s]) * k / steps, qy = segAy[s] + (segBy[s] - segAy[s]) * k / steps;
+        const c = Math.floor(qx / WC), rr = Math.floor(qy / WC);
+        if (c >= 0 && c < wCols && rr >= 0 && rr < wRows) occ[rr * wCols + c] = 1;
+      }
+    }
+    const L = 30; // Windschattenlänge in Zellen (~480 px), linear erholend
+    for (let rr = 0; rr < wRows; rr++) for (let c = 0; c < wCols; c++) {
+      let f = 1;
+      for (let k = 1; k <= L; k++) {
+        const cc = c - sign * k; if (cc < 0 || cc >= wCols) break;
+        if (occ[rr * wCols + cc]) { f = (k - 1) / L; break; }
+      }
+      shelter[rr * wCols + c] = f;
+    }
+    shelterSign = sign; shelterDirty = false;
+  }
+  function windFactor(X, Y) {
+    if (!shelter) return 1;
+    const c = Math.floor(X / WC), rr = Math.floor(Y / WC);
+    if (c < 0 || c >= wCols || rr < 0 || rr >= wRows) return 1;
+    return shelter[rr * wCols + c];
+  }
+
+  // ================= Gitter =================
+  function cellOf(X, Y) {
+    let c = Math.floor((X + MARGIN) / CELL), rr = Math.floor((Y + MARGIN) / CELL);
+    c = c < 0 ? 0 : c >= gCols ? gCols - 1 : c; rr = rr < 0 ? 0 : rr >= gRows ? gRows - 1 : rr;
+    return rr * gCols + c;
+  }
+  function buildGrid() {
+    cellCount.fill(0);
+    for (let i = 0; i < S.n; i++) { const c = cellOf(x[i], y[i]); pCell[i] = c; cellCount[c]++; }
+    let acc = 0;
+    for (let c = 0; c < cellCount.length; c++) { cellStart[c] = acc; acc += cellCount[c]; }
+    cellStart[cellCount.length] = acc;
+    cellCount.fill(0);
+    for (let i = 0; i < S.n; i++) { const c = pCell[i]; cellIdx[cellStart[c] + cellCount[c]++] = i; }
+  }
+
+  // ================= Constraints =================
+  let doFric = true;
+  function pair(i, j, count) {
+    const dx = x[j] - x[i], dy = y[j] - y[i]; const d2 = dx * dx + dy * dy; const R = r[i] + r[j];
+    if (count && d2 < R * R * 1.8) { if (nc[i] < 255) nc[i]++; if (nc[j] < 255) nc[j]++; if (type[j] === 0) wet[i] = 1; if (type[i] === 0) wet[j] = 1; }
+    if (d2 >= R * R || d2 < 1e-12) return;
+    const d = Math.sqrt(d2), pen = R - d, nx = dx / d, ny = dy / d;
+    // Shock Propagation: untere Partikel wirken schwerer -> stabile Stapel/Haufen in 1 Iteration
+    // nur Sand-Sand: Wasser soll frei fließen
+    let wi = im[i]; const wj = im[j];
+    if (type[i] === 1 && type[j] === 1) { let e = -S.shock * (y[i] - y[j]); e = e > 6 ? 6 : e < -6 ? -6 : e; wi *= Math.exp(e); }
+    const ws = wi + wj;
+    x[i] -= nx * pen * wi / ws; y[i] -= ny * pen * wi / ws;
+    x[j] += nx * pen * wj / ws; y[j] += ny * pen * wj / ws;
+    // Coulomb-Reibung (positionsbasiert, Macklin et al. 2014)
+    const mi = MAT[type[i]], mj = MAT[type[j]];
+    // nasse Körner (Kontakt zu Wasser): geringere Reibung (Schmierung)
+    const wetF = (wet[i] || wet[j]) ? S.wetFriction : 1;
+    const muS = Math.min(mi.muS, mj.muS) * wetF;
+    if (muS > 0 && doFric) {
+      const muK = Math.min(mi.muK, mj.muK) * wetF;
+      const rx = (x[i] - px[i]) - (x[j] - px[j]), ry = (y[i] - py[i]) - (y[j] - py[j]);
+      const dt = rx * -ny + ry * nx; const adt = Math.abs(dt);
+      let corr = adt < muS * pen ? dt : dt * Math.min(1, muK * pen / adt);
+      x[i] -= -ny * corr * wi / ws; y[i] -= nx * corr * wi / ws;
+      x[j] += -ny * corr * wj / ws; y[j] += nx * corr * wj / ws;
+    }
+  }
+
+  function forPairs(fn, count) {
+    for (let rr = gRows - 1; rr >= 0; rr--) for (let c = 0; c < gCols; c++) {   // von unten nach oben
+      const cell = rr * gCols + c; const s0 = cellStart[cell], s1 = cellStart[cell + 1];
+      for (let a = s0; a < s1; a++) {
+        const i = cellIdx[a];
+        for (let b = a + 1; b < s1; b++) fn(i, cellIdx[b], count);
+        // halbe Nachbarschaft: rechts, unten-links, unten, unten-rechts
+        if (c + 1 < gCols) { const n = cell + 1; for (let b = cellStart[n]; b < cellStart[n + 1]; b++) fn(i, cellIdx[b], count); }
+        if (rr + 1 < gRows) {
+          for (let dc = -1; dc <= 1; dc++) {
+            const cc = c + dc; if (cc < 0 || cc >= gCols) continue;
+            const n = cell + gCols + dc; for (let b = cellStart[n]; b < cellStart[n + 1]; b++) fn(i, cellIdx[b], count);
+          }
+        }
+      }
+    }
+  }
+  S.wetFriction = 0.3;
+  function solveParticles(count) { if (count) { nc.fill(0, 0, S.n); wet.fill(0, 0, S.n); } forPairs(pair, count); }
+  // XSPH-artige Viskosität: Wasser glättet Geschwindigkeiten mit Nachbarn (dämpft Spritzer und Zittern)
+  S.viscosity = 0.12;
+  S.sandDamp = 0.15;
+  function visc(i, j) {
+    let k, R;
+    if (type[i] === 0 && type[j] === 0) { k = S.viscosity; R = (r[i] + r[j]) * 1.5; }
+    else if (type[i] === 1 && type[j] === 1) { k = S.sandDamp; R = (r[i] + r[j]) * 1.08; }   // inelastische Kornstöße
+    else return;
+    const dx = x[j] - x[i], dy = y[j] - y[i]; const d2 = dx * dx + dy * dy;
+    if (d2 >= R * R) return;
+    const w = k * (1 - Math.sqrt(d2) / R);
+    const dvx = (vx[j] - vx[i]) * w * 0.5, dvy = (vy[j] - vy[i]) * w * 0.5;
+    vx[i] += dvx; vy[i] += dvy; vx[j] -= dvx; vy[j] -= dvy;
+  }
+
+  // Partikel gegen Striche (Kapseln) inkl. Anti-Tunneling
+  function segCross(ax, ay, bx, by, cx, cy, dx, dy) {
+    const d1x = bx - ax, d1y = by - ay, d2x = dx - cx, d2y = dy - cy;
+    const den = d1x * d2y - d1y * d2x; if (Math.abs(den) < 1e-9) return false;
+    const t = ((cx - ax) * d2y - (cy - ay) * d2x) / den, u = ((cx - ax) * d1y - (cy - ay) * d1x) / den;
+    return t >= 0 && t <= 1 && u >= 0 && u <= 1;
+  }
+  function collideStrokesP(i) {
+    const cell = segGrid[sgr(y[i]) * sgCols + sgc(x[i])]; if (!cell || cell.length === 0) return;
+    const mu = MAT[type[i]].wallMu * (wet[i] ? S.wetFriction : 1);
+    for (let k = 0; k < cell.length; k++) {
+      const s = cell[k];
+      const abx = segBx[s] - segAx[s], aby = segBy[s] - segAy[s]; const l2 = abx * abx + aby * aby;
+      let t = l2 > 0 ? ((x[i] - segAx[s]) * abx + (y[i] - segAy[s]) * aby) / l2 : 0; t = t < 0 ? 0 : t > 1 ? 1 : t;
+      const qx = segAx[s] + t * abx, qy = segAy[s] + t * aby;
+      let dx = x[i] - qx, dy = y[i] - qy; let d = Math.sqrt(dx * dx + dy * dy); const R = RS + r[i];
+      if (d >= R) continue;
+      let nx, ny;
+      if (d < 1e-6) { const l = Math.sqrt(l2) || 1; nx = -aby / l; ny = abx / l; } else { nx = dx / d; ny = dy / d; }
+      const pen = R - d; x[i] += nx * pen; y[i] += ny * pen;
+      if (mu > 0) {
+        const mx = x[i] - px[i], my = y[i] - py[i]; const tx = -ny, ty = nx; const dt = mx * tx + my * ty; const adt = Math.abs(dt);
+        const corr = adt < mu * pen ? dt : dt * Math.min(1, mu * pen / adt);
+        x[i] -= tx * corr; y[i] -= ty * corr;
+      }
+    }
+    // Anti-Tunneling: Bahn px->x darf keine Strich-Mittellinie kreuzen
+    for (let k = 0; k < cell.length; k++) {
+      const s = cell[k];
+      if (segCross(px[i], py[i], x[i], y[i], segAx[s], segAy[s], segBx[s], segBy[s])) { x[i] = px[i]; y[i] = py[i]; return; }
+    }
+  }
+
+  let stamp = new Int32Array(0), stampId = 0;
+  function collideStrokesBall(b) {
+    if (stamp.length < nSeg) stamp = new Int32Array(nSeg);
+    stampId++;
+    const c0 = sgc(b.x - b.r), c1 = sgc(b.x + b.r), r0 = sgr(b.y - b.r), r1 = sgr(b.y + b.r);
+    for (let rr = r0; rr <= r1; rr++) for (let cc = c0; cc <= c1; cc++) {
+      const cell = segGrid[rr * sgCols + cc];
+      for (let k = 0; k < cell.length; k++) {
+        const s = cell[k]; if (stamp[s] === stampId) continue; stamp[s] = stampId;
+        const abx = segBx[s] - segAx[s], aby = segBy[s] - segAy[s]; const l2 = abx * abx + aby * aby;
+        let t = l2 > 0 ? ((b.x - segAx[s]) * abx + (b.y - segAy[s]) * aby) / l2 : 0; t = t < 0 ? 0 : t > 1 ? 1 : t;
+        const qx = segAx[s] + t * abx, qy = segAy[s] + t * aby;
+        const dx = b.x - qx, dy = b.y - qy; const d = Math.sqrt(dx * dx + dy * dy); const R = RS + b.r;
+        if (d >= R || d < 1e-6) continue;
+        const nx = dx / d, ny = dy / d, pen = R - d;
+        b.x += nx * pen; b.y += ny * pen;
+        b.cn.push(nx, ny, pen);
+      }
+    }
+  }
+
+  function collideBalls() {
+    const B = S.balls;
+    for (let a = 0; a < B.length; a++) {
+      const b = B[a];
+      // Ball <-> Partikel (Masse-gewichtet => Auftrieb entsteht von selbst)
+      const c0 = Math.floor((b.x - b.r - 4 + MARGIN) / CELL), c1 = Math.floor((b.x + b.r + 4 + MARGIN) / CELL);
+      const r0 = Math.floor((b.y - b.r - 4 + MARGIN) / CELL), r1 = Math.floor((b.y + b.r + 4 + MARGIN) / CELL);
+      for (let rr = Math.max(0, r0); rr <= Math.min(gRows - 1, r1); rr++) for (let cc = Math.max(0, c0); cc <= Math.min(gCols - 1, c1); cc++) {
+        const cell = rr * gCols + cc;
+        for (let q = cellStart[cell]; q < cellStart[cell + 1]; q++) {
+          const i = cellIdx[q];
+          const dx = x[i] - b.x, dy = y[i] - b.y, R = b.r + r[i], d2 = dx * dx + dy * dy;
+          if (d2 >= R * R || d2 < 1e-12) continue;
+          const d = Math.sqrt(d2), pen = R - d, nx = dx / d, ny = dy / d, ws = im[i] + b.im;
+          x[i] += nx * pen * im[i] / ws; y[i] += ny * pen * im[i] / ws;
+          b.x -= nx * pen * b.im / ws; b.y -= ny * pen * b.im / ws;
+        }
+      }
+      // Ball <-> Ball
+      for (let c = a + 1; c < B.length; c++) {
+        const o = B[c]; const dx = o.x - b.x, dy = o.y - b.y, R = b.r + o.r, d2 = dx * dx + dy * dy;
+        if (d2 >= R * R || d2 < 1e-12) continue;
+        const d = Math.sqrt(d2), pen = R - d, nx = dx / d, ny = dy / d, ws = b.im + o.im;
+        b.x -= nx * pen * b.im / ws; b.y -= ny * pen * b.im / ws; o.x += nx * pen * o.im / ws; o.y += ny * pen * o.im / ws;
+      }
+    }
+  }
+
+  // ================= Simulationsschritt =================
+  S.step = function (dt) {
+    if (S.n === 0 && S.balls.length === 0) { time += dt; return; }
+    time += dt;
+    // Wind mit Böen (zwei überlagerte Sinus + Rauschen)
+    const gust = S.gusts ? 1 + 0.35 * Math.sin(time * 1.3) + 0.25 * Math.sin(time * 3.7 + 1) + 0.15 * (Math.random() * 2 - 1) : 1;
+    S.windNow = S.wind * gust;
+    const sign = Math.sign(S.wind);
+    if (sign !== 0 && (shelterDirty || sign !== shelterSign)) rebuildShelter(sign);
+    const Wpx = S.windNow * PPM;
+    const h = dt / SUB;
+    for (let s = 0; s < SUB; s++) substep(h, Wpx, s === 0);
+    // Partikel außerhalb entfernen
+    for (let i = S.n - 1; i >= 0; i--) {
+      if (!(x[i] > -MARGIN + 4 && x[i] < W + MARGIN - 4 && y[i] < H + MARGIN - 4)) removeP(i);
+    }
+    S.balls = S.balls.filter(b => b.x > -100 && b.x < W + 100 && b.y < H + 100);
+  };
+
+  function substep(h, Wpx, first) {
+    const n = S.n;
+    // Pre-Stabilisierung (Macklin 2014): bestehende Überlappungen auflösen, OHNE daraus Geschwindigkeit zu machen.
+    // Verhindert, dass Stapel "pumpen" und Körner/Tropfen hochgeschleudert werden.
+    if (S.preStab) {
+      buildGrid(); doFric = false;
+      for (let i = 0; i < n; i++) { px[i] = x[i]; py[i] = y[i]; }
+      forPairs(pair, false);
+      for (let i = 0; i < n; i++) collideStrokesP(i);
+      doFric = true;
+    }
+    const vmax = 0.9 * (RS + 2) / h;   // max. Weg pro Substep < Strichradius => kein Durchtunneln
+    for (let i = 0; i < n; i++) {
+      const m = MAT[type[i]];
+      // Luftwiderstand/Wind wirkt nur auf exponierte Partikel (wenige Nachbarn)
+      let ax = 0, ay = G;
+      const wf = Wpx !== 0 ? windFactor(x[i], y[i]) : 0;
+      const rel = Wpx * wf - vx[i];
+      if (nc[i] <= 1) {
+        // in der Luft: voller Luftwiderstand relativ zur bewegten Luft
+        ax += m.drag * rel; ay -= m.drag * vy[i];
+      } else if (nc[i] < 6 && rel * Wpx > 0) {
+        // Oberfläche: Wind schiebt nur, solange das Partikel langsamer als der Wind ist (kein künstliches Bremsen)
+        const expo = nc[i] <= 3 ? 1 : (6 - nc[i]) / 3;
+        ax += m.drag * expo * rel;
+      }
+      vx[i] += ax * h; vy[i] += ay * h;
+      const v2 = vx[i] * vx[i] + vy[i] * vy[i];
+      if (v2 > vmax * vmax) { const f = vmax / Math.sqrt(v2); vx[i] *= f; vy[i] *= f; }
+      px[i] = x[i]; py[i] = y[i]; x[i] += vx[i] * h; y[i] += vy[i] * h;
+    }
+    for (const b of S.balls) {
+      const kd = 6 / (b.dens * b.r);
+      const wf = Wpx !== 0 ? windFactor(b.x, b.y - b.r * 0.5) : 0;
+      b.vx += kd * (Wpx * wf - b.vx) * h * 0.5; b.vy += (G - kd * b.vy * 0.5) * h;
+      const v2 = b.vx * b.vx + b.vy * b.vy; if (v2 > vmax * vmax) { const f = vmax / Math.sqrt(v2); b.vx *= f; b.vy *= f; }
+      b.px = b.x; b.py = b.y; b.x += b.vx * h; b.y += b.vy * h; b.cn.length = 0;
+    }
+    buildGrid();
+    solveParticles(first);
+    collideBalls();
+    for (let i = 0; i < n; i++) collideStrokesP(i);
+    for (const b of S.balls) collideStrokesBall(b);
+    // Geschwindigkeiten aus Positionen
+    const ih = 1 / h;
+    for (let i = 0; i < n; i++) { vx[i] = (x[i] - px[i]) * ih; vy[i] = (y[i] - py[i]) * ih; }
+    forPairs(visc, false);
+    for (const b of S.balls) {
+      b.vx = (b.x - b.px) * ih; b.vy = (b.y - b.py) * ih;
+      // Haft-/Gleitreibung am Kontakt -> echtes Rollen (Vollkreis I = 1/2 m R²)
+      const MU = 0.6;
+      for (let k = 0; k < b.cn.length; k += 3) {
+        const nx = b.cn[k], ny = b.cn[k + 1], pen = b.cn[k + 2];
+        const tx = -ny, ty = nx;
+        const vrel = b.vx * tx + b.vy * ty - b.w * b.r;
+        const jn = b.m * pen * ih;                 // Normalimpuls aus Positionskorrektur
+        let j = -vrel / (b.im + b.r * b.r / b.I);
+        const jmax = MU * jn; if (j > jmax) j = jmax; else if (j < -jmax) j = -jmax;
+        b.vx += j * b.im * tx; b.vy += j * b.im * ty; b.w -= j * b.r / b.I;
+      }
+      b.w *= 0.9995;                               // geringe Rollreibung
+      b.ang += b.w * h;
+    }
+  }
+
+  S.resize(W, H);
+  return S;
+}
+if (typeof module !== 'undefined') module.exports = { createSim };
+
+</script>
+<script>
+(() => {
+  const cv = document.getElementById('cv');
+  const ctx = cv.getContext('2d');
+  let DPR = Math.min(window.devicePixelRatio || 1, 2);
+  let W = window.innerWidth, H = window.innerHeight;
+  const sim = createSim(W, H);
+  const RS = sim.RS;
+
+  function resize() {
+    W = window.innerWidth; H = window.innerHeight; DPR = Math.min(window.devicePixelRatio || 1, 2);
+    cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
+    sim.resize(W, H);
+  }
+  window.addEventListener('resize', resize); resize();
+
+  // ---------- UI-Zustand ----------
+  const ui = { tool: 'draw', mat: 0, rain: true, rate: 150, paused: false, debug: false };
+  const undo = [];
+  const $ = id => document.getElementById(id);
+  document.querySelectorAll('[data-tool]').forEach(b => b.onclick = () => {
+    ui.tool = b.dataset.tool;
+    document.querySelectorAll('[data-tool]').forEach(o => o.classList.toggle('on', o === b));
+  });
+  $('mat').onchange = e => ui.mat = +e.target.value;
+  $('rain').onclick = e => { ui.rain = !ui.rain; e.target.classList.toggle('on', ui.rain); };
+  $('rate').oninput = e => ui.rate = +e.target.value;
+  $('wind').oninput = e => { sim.wind = +e.target.value; $('windv').textContent = sim.wind + ' m/s'; };
+  $('gust').onchange = e => sim.gusts = e.target.checked;
+  $('undo').onclick = () => {
+    const a = undo.pop(); if (!a) return;
+    if (a.t === 's') sim.removeStroke(a.id); else sim.balls = sim.balls.filter(b => b !== a.b);
+  };
+  $('clearP').onclick = () => sim.clearParticles();
+  $('reset').onclick = () => { sim.clearParticles(); sim.balls = []; for (const s of [...sim.strokes]) sim.removeStroke(s.id); undo.length = 0; };
+  $('pause').onclick = e => { ui.paused = !ui.paused; e.target.textContent = ui.paused ? '▶ Weiter' : '⏸ Pause'; };
+  $('dbg').onclick = e => { ui.debug = !ui.debug; e.target.classList.toggle('on', ui.debug); };
+  $('scene').onclick = demoScene;
+
+  // ---------- Strichverarbeitung ----------
+  function chaikin(p) {
+    if (p.length < 3) return p;
+    const o = [p[0]];
+    for (let i = 0; i < p.length - 1; i++) {
+      const a = p[i], b = p[i + 1];
+      o.push([0.75 * a[0] + 0.25 * b[0], 0.75 * a[1] + 0.25 * b[1]], [0.25 * a[0] + 0.75 * b[0], 0.25 * a[1] + 0.75 * b[1]]);
+    }
+    o.push(p[p.length - 1]); return o;
+  }
+  function rdp(p, eps) {
+    if (p.length < 3) return p;
+    const a = p[0], b = p[p.length - 1]; let idx = 0, dmax = 0;
+    const dx = b[0] - a[0], dy = b[1] - a[1], L = Math.hypot(dx, dy) || 1e-9;
+    for (let i = 1; i < p.length - 1; i++) {
+      const d = Math.abs(dy * p[i][0] - dx * p[i][1] + b[0] * a[1] - b[1] * a[0]) / L;
+      if (d > dmax) { dmax = d; idx = i; }
+    }
+    if (dmax > eps) return rdp(p.slice(0, idx + 1), eps).slice(0, -1).concat(rdp(p.slice(idx), eps));
+    return [a, b];
+  }
+  function finishStroke(raw) {
+    if (raw.length < 2) return;
+    let len = 0; for (let i = 1; i < raw.length; i++) len += Math.hypot(raw[i][0] - raw[i - 1][0], raw[i][1] - raw[i - 1][1]);
+    if (len < 10) return;
+    let p = chaikin(chaikin(raw));
+    p = rdp(p, 1.5);
+    // Schließen, wenn Ende nah am Anfang (verhindert Mini-Lücken)
+    const s = p[0], e = p[p.length - 1];
+    if (p.length > 3 && len > 60 && Math.hypot(s[0] - e[0], s[1] - e[1]) < 20) p[p.length - 1] = [s[0], s[1]];
+    const id = sim.addStroke(p);
+    undo.push({ t: 's', id });
+  }
+
+  // ---------- Eingabe ----------
+  let drawing = null, pointer = { x: 0, y: 0, down: false };
+  cv.addEventListener('pointerdown', e => {
+    cv.setPointerCapture(e.pointerId);
+    pointer = { x: e.clientX, y: e.clientY, down: true };
+    if (ui.tool === 'draw') drawing = [[e.clientX, e.clientY]];
+    else if (ui.tool === 'erase') eraseAt(e.clientX, e.clientY);
+    else if (ui.tool === 'ball') {
+      const R = +$('bsize').value;
+      if (sim.isFree(e.clientX, e.clientY, R)) { sim.addBall(e.clientX, e.clientY, R, +$('bdens').value); undo.push({ t: 'b', b: sim.balls[sim.balls.length - 1] }); }
+    }
+  });
+  cv.addEventListener('pointermove', e => {
+    pointer.x = e.clientX; pointer.y = e.clientY;
+    if (!pointer.down) return;
+    if (ui.tool === 'draw' && drawing) {
+      const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
+      for (const ev of evs) {
+        const l = drawing[drawing.length - 1];
+        if (Math.hypot(ev.clientX - l[0], ev.clientY - l[1]) >= 2) drawing.push([ev.clientX, ev.clientY]);
+      }
+    } else if (ui.tool === 'erase') eraseAt(e.clientX, e.clientY);
+  });
+  const up = () => { pointer.down = false; if (drawing) { finishStroke(drawing); drawing = null; } };
+  cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+
+  function eraseAt(X, Y) {
+    const id = sim.strokeAt(X, Y, 12); if (id) sim.removeStroke(id);
+    sim.balls = sim.balls.filter(b => Math.hypot(b.x - X, b.y - Y) > b.r + 10);
+  }
+
+  // ---------- Demo-Szene ----------
+  function demoScene() {
+    $('reset').onclick();
+    const u = [[W * 0.08, H * 0.35], [W * 0.08, H * 0.6]];
+    for (let a = 1; a < 16; a++) { const t = Math.PI * a / 16; u.push([W * 0.18 - W * 0.10 * Math.cos(t), H * 0.6 + H * 0.08 * Math.sin(t)]); }
+    u.push([W * 0.28, H * 0.6], [W * 0.28, H * 0.35]);
+    undo.push({ t: 's', id: sim.addStroke(u) });
+    undo.push({ t: 's', id: sim.addStroke([[W * 0.33, H * 0.25], [W * 0.62, H * 0.55]]) });                  // Schräge
+    undo.push({ t: 's', id: sim.addStroke([[W * 0.60, H * 0.75], [W * 0.98, H * 0.75]]) });                  // Boden rechts
+    // Becher mit Lücke unten
+    undo.push({ t: 's', id: sim.addStroke([[W * 0.70, H * 0.35], [W * 0.75, H * 0.55], [W * 0.785, H * 0.55]]) });
+    undo.push({ t: 's', id: sim.addStroke([[W * 0.805, H * 0.55], [W * 0.84, H * 0.55], [W * 0.89, H * 0.35]]) });
+    // geschlossener Kreis
+    const o = []; for (let a = 0; a <= 24; a++) { const t = 2 * Math.PI * a / 24; o.push([W * 0.45 + 45 * Math.cos(t), H * 0.80 + 45 * Math.sin(t)]); }
+    undo.push({ t: 's', id: sim.addStroke(o) });
+    sim.addBall(W * 0.36, H * 0.25 - 40, 22, 3); undo.push({ t: 'b', b: sim.balls[sim.balls.length - 1] });
+    sim.addBall(W * 0.18, H * 0.30, 22, 0.5); undo.push({ t: 'b', b: sim.balls[sim.balls.length - 1] });
+  }
+
+  // ---------- Emitter ----------
+  let rainAcc = 0;
+  function emit(dt) {
+    if (ui.rain && ui.rate > 0) {
+      rainAcc += ui.rate * dt;
+      while (rainAcc >= 1) {
+        rainAcc -= 1;
+        sim.addParticle(ui.mat, Math.random() * W, -4 - Math.random() * 16, sim.windNow * sim.PPM * 0.5, 300 + Math.random() * 100);
+      }
+    }
+    if (ui.tool === 'pour' && pointer.down) {
+      for (let k = 0; k < 6; k++) {
+        const a = Math.random() * Math.PI * 2, rr = Math.random() * 12;
+        const X = pointer.x + Math.cos(a) * rr, Y = pointer.y + Math.sin(a) * rr;
+        if (sim.isFree(X, Y, 3)) sim.addParticle(ui.mat, X, Y, 0, 60);
+      }
+    }
+  }
+
+  // ---------- Wind-Visualisierung (rein kosmetisch) ----------
+  const streaks = Array.from({ length: 60 }, () => ({ x: Math.random() * 2000, y: Math.random() * 1200, l: 20 + Math.random() * 40 }));
+
+  // ---------- Rendern ----------
+  const sandCols = ['#d8b26a', '#c79b52', '#e6c787'];
+  function render() {
+    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+    const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#16324f'); g.addColorStop(1, '#0d1b2a');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+
+    // Wind
+    if (Math.abs(sim.windNow) > 0.2) {
+      ctx.strokeStyle = 'rgba(200,230,255,0.18)'; ctx.lineWidth = 1; ctx.beginPath();
+      for (const s of streaks) {
+        s.x += sim.windNow * sim.PPM / 60 * 0.6; if (s.x > W + 60) s.x = -60; if (s.x < -60) s.x = W + 60;
+        ctx.moveTo(s.x, s.y % H); ctx.lineTo(s.x - Math.sign(sim.windNow) * s.l, s.y % H);
+      }
+      ctx.stroke();
+    }
+
+    const P = sim.p, n = sim.n;
+    // Wasser: weiche, überlappende Kreise -> zusammenhängende Fläche
+    ctx.fillStyle = 'rgba(40,150,255,0.55)'; ctx.beginPath();
+    for (let i = 0; i < n; i++) if (P.type[i] === 0) { const rr = P.r[i] * 1.9; ctx.moveTo(P.x[i] + rr, P.y[i]); ctx.arc(P.x[i], P.y[i], rr, 0, 6.2832); }
+    ctx.fill();
+    ctx.fillStyle = 'rgba(120,200,255,0.9)'; ctx.beginPath();
+    for (let i = 0; i < n; i++) if (P.type[i] === 0) { const rr = P.r[i] * 1.05; ctx.moveTo(P.x[i] + rr, P.y[i]); ctx.arc(P.x[i], P.y[i], rr, 0, 6.2832); }
+    ctx.fill();
+    // Sand: drei Farbtöne für Körnung
+    for (let c = 0; c < 3; c++) {
+      ctx.fillStyle = sandCols[c]; ctx.beginPath();
+      for (let i = 0; i < n; i++) if (P.type[i] === 1 && Math.floor(P.shade[i] * 3) === c) { const rr = P.r[i] * 1.15; ctx.rect(P.x[i] - rr, P.y[i] - rr, rr * 2, rr * 2); }
+      ctx.fill();
+    }
+
+    // Striche
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.lineWidth = RS * 2; ctx.strokeStyle = '#e8eef5';
+    for (const s of sim.strokes) {
+      ctx.beginPath(); ctx.moveTo(s.pts[0][0], s.pts[0][1]);
+      for (let i = 1; i < s.pts.length; i++) ctx.lineTo(s.pts[i][0], s.pts[i][1]);
+      ctx.stroke();
+    }
+    if (drawing && drawing.length > 1) {
+      ctx.strokeStyle = 'rgba(232,238,245,0.6)'; ctx.beginPath(); ctx.moveTo(drawing[0][0], drawing[0][1]);
+      for (const q of drawing) ctx.lineTo(q[0], q[1]); ctx.stroke();
+    }
+    // Bälle (Markierung zeigt Rotation -> Rollen vs. Rutschen sichtbar)
+    for (const b of sim.balls) {
+      ctx.fillStyle = b.dens < 1 ? '#ff9f1c' : '#c0392b';
+      ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, 6.2832); ctx.fill();
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.beginPath();
+      ctx.moveTo(b.x, b.y); ctx.lineTo(b.x + Math.cos(b.ang) * b.r * 0.9, b.y + Math.sin(b.ang) * b.r * 0.9); ctx.stroke();
+    }
+    // Werkzeug-Cursor
+    if (ui.tool === 'erase' || ui.tool === 'pour') {
+      ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 1; ctx.beginPath();
+      ctx.arc(pointer.x, pointer.y, ui.tool === 'erase' ? 12 : 12, 0, 6.2832); ctx.stroke();
+    }
+    if (ui.debug) {
+      ctx.fillStyle = '#ff0'; for (let i = 0; i < n; i++) if (P.nc[i] <= 1) ctx.fillRect(P.x[i] - 1, P.y[i] - 1, 2, 2);
+    }
+  }
+
+  // ---------- Hauptschleife: feste Schrittweite, adaptives Partikelbudget ----------
+  const DT = 1 / 60; let acc = 0, last = performance.now(), stepMs = 0, fps = 60;
+  function loop(now) {
+    const frame = Math.min(0.1, (now - last) / 1000); last = now; fps = fps * 0.95 + (1 / Math.max(frame, 1e-3)) * 0.05;
+    if (!ui.paused) {
+      acc += frame; let steps = 0;
+      while (acc >= DT && steps < 2) {
+        emit(DT);
+        const t0 = performance.now(); sim.step(DT); stepMs = stepMs * 0.9 + (performance.now() - t0) * 0.1;
+        acc -= DT; steps++;
+      }
+      if (acc > DT) acc = 0;   // Gerät zu langsam: Zeit verwerfen statt "Spiral of Death"
+      if (stepMs > 12 && sim.maxP > 800) sim.maxP -= 20;
+      else if (stepMs < 7 && sim.maxP < 5000 && sim.n > sim.maxP - 50) sim.maxP += 20;
+    }
+    render();
+    $('hud').textContent = `FPS ${fps.toFixed(0)}  Schritt ${stepMs.toFixed(1)} ms\nPartikel ${sim.n} / Budget ${sim.maxP}\nWind aktuell ${sim.windNow.toFixed(1)} m/s  Bälle ${sim.balls.length}`;
+    requestAnimationFrame(loop);
+  }
+  demoScene();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
