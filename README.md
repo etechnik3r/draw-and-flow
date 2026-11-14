@@ -41,4 +41,5 @@ Bernsteinfarbene Striche gehören zur Aufgabe und lassen sich nicht radieren. Un
 - Wasser–Wasser: *Double Density Relaxation* (Clavet et al. 2005), Druck aus lokaler Dichte, nur abstoßend. Harte Kugelkontakte allein verklemmen im Ruhezustand wie ein Glas (Pegel gleichen sich nicht aus, Bälle bleiben unter Wasser).
 - Viskosität (XSPH) als einstellbare Dämpfung: Schwappen klingt ab, das Becken wird still.
 - Sand: harte Kontakte mit Coulomb-Reibung, Schock-Propagation und Vorstabilisierung (stabile Haufen).
+- Sand im Wasser: Der Tropfen weicht dem Korn aus (Verdrängung, der Pegel steigt). Auftrieb nach Archimedes mit Korndichte 2,65 (Quarz) und Widerstand relativ zum umgebenden Wasser: Ein Einzelkorn sinkt mit ≈ 0,4 m/s und setzt sich als Sediment am Boden ab. Körner wirken fürs Wasser als Randpartikel (zählen in der Dichte, drücken mit dem Wasserdruck; Akinci et al. 2012). Eingeschlossenes Porenwasser wird schrittweise herausgedrückt und durch Darcy-Reibung gebremst; sonst schießt es mit Tausenden px/s heraus.
 - Bälle im Wasser: Auftrieb nach Archimedes aus dem eingetauchten Anteil plus Strömungswiderstand; Rollen mit Haftreibung.

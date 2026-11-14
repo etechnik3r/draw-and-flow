@@ -203,6 +203,9 @@ function createSim(W, H) {
     { name: 'Wasser', dens: 1.0, muS: 0.0, muK: 0.0, wallMu: 0.03, drag: 2.0, r: 3.0, rj: 0.12 },
     { name: 'Sand',   dens: 1.6, muS: 0.8, muK: 0.6, wallMu: 0.9, drag: 2.5, r: 2.6, rj: 0.2 },
   ];
+  // Sand im Wasser: Korndichte von Quarz (Auftrieb nach Archimedes), Widerstand [1/s] -> Sinkgeschwindigkeit,
+  // sandSubFull = Wasserdichte-Summe Σ(1-q)² um ein vollständig eingetauchtes Korn
+  S.grainDens = 2.65; S.sandWaterDrag = 50; S.sandSubFull = 1.2; S.sandWaterVisc = 0.5; S.sandRho = 1; S.sandPressF = 0.5; S.sandDmax = 0.5; S.darcy = 40; S.sandPushMax = 0.5;
   S.MAT = MAT; S.waterArea = 44; S.ringCal = 1; S.ballWaterDrag = 8; S.shock = 0.6; S.preStab = true; S.PPM = PPM; S.RS = RS;
 
   // --- Partikel (Structure of Arrays) ---
@@ -211,6 +214,8 @@ function createSim(W, H) {
   const vx = new Float32Array(MAXP), vy = new Float32Array(MAXP);
   const r = new Float32Array(MAXP), im = new Float32Array(MAXP), rho = new Float32Array(MAXP), rhoN = new Float32Array(MAXP);
   const type = new Uint8Array(MAXP), nc = new Uint8Array(MAXP), wet = new Uint8Array(MAXP), shade = new Float32Array(MAXP);
+  // je Sandkorn: umgebendes Wasser (Kernel-Summe) und dessen gewichtete Geschwindigkeit
+  const nw = new Float32Array(MAXP), swx = new Float32Array(MAXP), swy = new Float32Array(MAXP);
   S.p = { x, y, vx, vy, r, type, shade, nc };
   S.n = 0;
   S.maxP = 5000;        // aktuelles Budget (wird von der UI gesetzt)
@@ -355,6 +360,7 @@ function createSim(W, H) {
     const l = --S.n; if (i === l) return;
     x[i] = x[l]; y[i] = y[l]; px[i] = px[l]; py[i] = py[l]; vx[i] = vx[l]; vy[i] = vy[l];
     r[i] = r[l]; im[i] = im[l]; type[i] = type[l]; nc[i] = nc[l]; shade[i] = shade[l]; rho[i] = rho[l]; rhoN[i] = rhoN[l];
+    nw[i] = nw[l]; swx[i] = swx[l]; swy[i] = swy[l];
   }
   S.clearParticles = function (t) {
     for (let i = S.n - 1; i >= 0; i--) if (t === undefined || type[i] === t) removeP(i);
@@ -463,12 +469,21 @@ function createSim(W, H) {
     const dx = x[j] - x[i], dy = y[j] - y[i]; const d2 = dx * dx + dy * dy; const R = r[i] + r[j];
     if (count && d2 < R * R * 1.8) { if (nc[i] < 255) nc[i]++; if (nc[j] < 255) nc[j]++; if (type[j] === 0) wet[i] = 1; if (type[i] === 0) wet[j] = 1; }
     if (d2 >= R * R || d2 < 1e-12) return;
-    const d = Math.sqrt(d2), pen = R - d, nx = dx / d, ny = dy / d;
+    const d = Math.sqrt(d2), nx = dx / d, ny = dy / d; let pen = R - d;
     // Shock Propagation: untere Partikel wirken schwerer -> stabile Stapel/Haufen in 1 Iteration.
     // Nur Sand-Sand! Bei Wasser würde das den hydrostatischen Druck abschneiden
     // (kommunizierende Röhren gleichen sich dann nicht mehr aus).
-    let wi = im[i]; const wj = im[j];
-    if (type[i] === 1 && type[j] === 1) { let e = -S.shock * (y[i] - y[j]); e = e > 6 ? 6 : e < -6 ? -6 : e; wi *= Math.exp(e); }
+    let wi = im[i], wj = im[j];
+    // Sand–Wasser: der Tropfen weicht vollständig aus (das Korn verdrängt Wasser -> Pegel steigt).
+    // Die Rückwirkung des Wassers aufs Korn kommt explizit über Auftrieb + Widerstand (siehe substep).
+    // Mit Massengewichtung würde das Korn (Masse 34) auf den schwereren Tropfen (44) liegen bleiben.
+    if (type[i] !== type[j]) {
+      if (type[i] === 0) { wi = 1; wj = 0; } else { wi = 0; wj = 1; }
+      // Porenwasser wird schrittweise herausgedrückt: setzt sich Sand um einen Tropfen (Poren sind kleiner als ein
+      // Tropfen), würde ein voller Schritt ihn mit Weg/h ≈ 1000 px/s herausschießen.
+      if (pen > S.sandPushMax) pen = S.sandPushMax;
+    }
+    else if (type[i] === 1) { let e = -S.shock * (y[i] - y[j]); e = e > 6 ? 6 : e < -6 ? -6 : e; wi *= Math.exp(e); }
     const ws = wi + wj;
     x[i] -= nx * pen * wi / ws; y[i] -= ny * pen * wi / ws;
     x[j] += nx * pen * wj / ws; y[j] += ny * pen * wj / ws;
@@ -541,7 +556,8 @@ function createSim(W, H) {
   S.HK = 13; S.rho0 = 2.0; S.kP = 4e5; S.kN = 8e5; S.dmax = 1.5;
   let HH = 0, IHK = 0, hh2 = 0;
   function pairAll(i, j, count) {
-    if (type[i] !== 0 || type[j] !== 0) { pair(i, j, count); return; }
+    if (type[i] !== type[j]) { pair(i, j, count); sandPress(i, j); return; }
+    if (type[i] !== 0) { pair(i, j, count); return; }
     const dx = x[j] - x[i], dy = y[j] - y[i], d2 = dx * dx + dy * dy; if (d2 >= HH || d2 < 1e-12) return;
     if (count && d2 < (r[i] + r[j]) * (r[i] + r[j]) * 1.8) { if (nc[i] < 255) nc[i]++; if (nc[j] < 255) nc[j]++; wet[i] = 1; wet[j] = 1; }
     const d = Math.sqrt(d2), q = 1 - d * IHK;
@@ -550,9 +566,32 @@ function createSim(W, H) {
     let D = hh2 * (P * q + PN * q * q); if (D > S.dmax) D = S.dmax;
     const ux = dx / d * D * 0.5, uy = dy / d * D * 0.5; x[i] -= ux; y[i] -= uy; x[j] += ux; y[j] += uy;
   }
+  // Sandkorn als Randpartikel fürs Wasser (Akinci et al. 2012): es zählt in der Wasserdichte mit und drückt
+  // den Tropfen mit dessen Druck weg. Sonst "sieht" das Wasser am Korn Vakuum, wird hineingedrückt und vom harten
+  // Kontakt zurückgestoßen -> eingeklemmtes Porenwasser schaukelt sich auf.
+  function sandPress(i, j) {
+    const o = type[i] === 0 ? i : j, s = o === i ? j : i;
+    const dx = x[o] - x[s], dy = y[o] - y[s], d2 = dx * dx + dy * dy; if (d2 >= HH || d2 < 1e-12) return;
+    const d = Math.sqrt(d2), q = 1 - d * IHK;
+    let P = S.kP * (rho[o] - S.rho0); if (P < 0) P = 0;
+    let D = hh2 * (P * q + S.kN * rhoN[o] * q * q) * S.sandPressF; if (D > S.sandDmax) D = S.sandDmax;
+    x[o] += dx / d * D; y[o] += dy / d * D;
+  }
   // Viskosität (XSPH) + Dichte für den nächsten Substep in einem Durchlauf
   function viscDens(i, j) {
-    if (type[i] !== 0 || type[j] !== 0) { visc(i, j); return; }
+    if (type[i] !== type[j]) {   // Sand–Wasser: Eintauchgrad und Wassergeschwindigkeit am Korn sammeln
+      const dx = x[j] - x[i], dy = y[j] - y[i], d2 = dx * dx + dy * dy; if (d2 >= HH) return;
+      const q = 1 - Math.sqrt(d2) * IHK, w = q * q, s = type[i] === 1 ? i : j, o = s === i ? j : i;
+      nw[s] += w; swx[s] += w * vx[o]; swy[s] += w * vy[o];
+      nw[o] += w; swx[o] += w * vx[s]; swy[o] += w * vy[s];       // Tropfen: Sandanteil + Korngeschwindigkeit (Darcy)
+      rho[o] += w * S.sandRho; rhoN[o] += w * q * S.sandRho;    // Korn belegt Raum in der Wasserdichte
+      // Haftbedingung am Korn: Wasser direkt am Sand übernimmt dessen Geschwindigkeit (XSPH). Ohne das schaukelt
+      // sich zwischen Druck und Kontakt eingeklemmtes Porenwasser auf (Spitzen > 7000 px/s).
+      const R = (r[i] + r[j]) * 1.5, d = Math.sqrt(d2);
+      if (d < R) { const k = S.sandWaterVisc * (1 - d / R); vx[o] += (vx[s] - vx[o]) * k; vy[o] += (vy[s] - vy[o]) * k; }
+      return;
+    }
+    if (type[i] !== 0) { visc(i, j); return; }
     const dx = x[j] - x[i], dy = y[j] - y[i], d2 = dx * dx + dy * dy; if (d2 >= HH) return;
     const d = Math.sqrt(d2), q = 1 - d * IHK, q2 = q * q; rho[i] += q2; rho[j] += q2; rhoN[i] += q2 * q; rhoN[j] += q2 * q;
     const R = (r[i] + r[j]) * 1.5; if (d >= R) return;
@@ -727,6 +766,17 @@ function createSim(W, H) {
         ax += m.drag * expo * rel;
       }
       vx[i] += ax * h; vy[i] += ay * h;
+      if (type[i] === 0 && nw[i] > 0) {
+        // Porenwasser (Darcy): Reibung relativ zum Korngerüst, wächst mit dem Sandanteil -> Wasser sickert langsam
+        const f = nw[i] >= S.sandSubFull ? 1 : nw[i] / S.sandSubFull, k = Math.min(1, S.darcy * f * h), iw = 1 / nw[i];
+        vx[i] += (swx[i] * iw - vx[i]) * k; vy[i] += (swy[i] * iw - vy[i]) * k;
+      } else if (type[i] === 1 && nw[i] > 0) {
+        // Sand im Wasser: Auftrieb ρ_W/ρ_Korn·g·(eingetauchter Anteil) und Mitnahme durch die Strömung
+        const f = nw[i] >= S.sandSubFull ? 1 : nw[i] / S.sandSubFull;
+        vy[i] -= G * f / S.grainDens * h;
+        const k = Math.min(1, S.sandWaterDrag * f * h), iw = 1 / nw[i];
+        vx[i] += (swx[i] * iw - vx[i]) * k; vy[i] += (swy[i] * iw - vy[i]) * k;
+      }
       const v2 = vx[i] * vx[i] + vy[i] * vy[i];
       if (v2 > vmax * vmax) { const f = vmax / Math.sqrt(v2); vx[i] *= f; vy[i] *= f; }
       px[i] = x[i]; py[i] = y[i]; x[i] += vx[i] * h; y[i] += vy[i] * h;
@@ -754,7 +804,7 @@ function createSim(W, H) {
     // Geschwindigkeiten aus Positionen
     const ih = 1 / h;
     for (let i = 0; i < n; i++) { vx[i] = (x[i] - px[i]) * ih; vy[i] = (y[i] - py[i]) * ih; }
-    rho.fill(0, 0, n); rhoN.fill(0, 0, n);
+    rho.fill(0, 0, n); rhoN.fill(0, 0, n); nw.fill(0, 0, n); swx.fill(0, 0, n); swy.fill(0, 0, n);
     for (let k = 0; k < nPairs; k++) viscDens(pI[k], pJ[k]);
     for (const b of S.balls) {
       b.vx = (b.x - b.px) * ih; b.vy = (b.y - b.py) * ih;
