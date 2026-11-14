@@ -8,13 +8,14 @@
   :root { --bar-h: 44px; --ink: rgba(225, 238, 255, .86); --ink-dim: rgba(225, 238, 255, .5); --line: rgba(200, 225, 255, .14);
           --glass: rgba(10, 24, 44, .55); --on: rgba(120, 200, 255, .2); --on-line: rgba(140, 210, 255, .55); --accent: #7cc8ff; }
   html, body { margin: 0; height: 100%; overflow: hidden; background: #0d1b2a; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--ink); }
-  canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; touch-action: none; display: block; }
+  /* Größe setzt das Skript in px (100vh ist auf dem Handy die Höhe ohne Adressleiste -> Versatz) */
+  canvas { position: fixed; left: 0; top: 0; touch-action: none; display: block; }
 
   /* --- schlanke Werkzeugleiste: nur Linien-Icons, Glas-Hintergrund, Haarlinie unten --- */
   #bar { position: fixed; left: 0; right: 0; top: 0; height: var(--bar-h); padding: 0 6px; padding-top: env(safe-area-inset-top);
          display: flex; align-items: center; gap: 2px; overflow-x: auto; scrollbar-width: none;
          background: var(--glass); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
-         border-bottom: 1px solid var(--line); z-index: 3; user-select: none; -webkit-user-select: none; }
+         border-bottom: 1px solid var(--line); z-index: 3; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
   #bar::-webkit-scrollbar { display: none; }
   #bar .sep { flex: 0 0 1px; height: 20px; background: var(--line); margin: 0 4px; }
   #bar .grow { flex: 1 1 auto; min-width: 2px; }
@@ -25,6 +26,8 @@
   .ib:hover { background: rgba(255, 255, 255, .06); }
   .ib.on { background: var(--on); border-color: var(--on-line); color: #fff; }
   .ib:focus-visible { outline: 1px solid var(--accent); outline-offset: 1px; }
+  .ib .dot { position: absolute; right: 3px; bottom: 3px; border-radius: 50%; background: currentColor; opacity: .85; pointer-events: none; }
+  @media (max-width: 440px) { #bar { gap: 0; padding: 0 3px; } .ib { width: 30px; } #bar .sep { margin: 0 2px; } }
   .ib .badge { position: absolute; right: 1px; bottom: 0; font: 600 8.5px/1 ui-monospace, Menlo, monospace; color: var(--ink-dim); }
 
   /* --- Einstellungen (Zahnrad): Bottom-Sheet auf dem Handy, Seitenleiste am Desktop --- */
@@ -56,6 +59,43 @@
   .btn:hover { background: rgba(255, 255, 255, .06); }
   .x { background: transparent; border: 0; color: var(--ink-dim); font-size: 20px; cursor: pointer; padding: 0 4px; }
 
+  /* --- Popover unter der Leiste: Stiftdicke, Radierergröße, Aufgabenliste --- */
+  #pop { position: fixed; z-index: 5; display: none; padding: 8px; border-radius: 12px; background: rgba(12, 26, 46, .96);
+         -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px); border: 1px solid var(--line); font-size: 13px;
+         max-width: calc(100vw - 16px); box-shadow: 0 8px 24px rgba(0, 0, 0, .35); user-select: none; -webkit-user-select: none; }
+  #pop.open { display: block; }
+  #pop .ptitle { font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-dim); margin: 0 4px 6px; }
+  #pop .sizes { display: flex; gap: 4px; }
+  #pop .sz { width: 58px; height: 58px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+             background: transparent; border: 1px solid transparent; border-radius: 9px; color: var(--ink); cursor: pointer; font-size: 11px; }
+  #pop .sz:hover { background: rgba(255, 255, 255, .06); }
+  #pop .sz.on { background: var(--on); border-color: var(--on-line); color: #fff; }
+  #pop .sz i { display: block; border-radius: 50%; background: currentColor; box-sizing: border-box; }
+  #pop .list { display: flex; flex-direction: column; width: min(340px, calc(100vw - 32px)); }
+  #pop .ti { display: flex; align-items: center; gap: 10px; text-align: left; background: transparent; border: 0; border-radius: 9px;
+             color: var(--ink); padding: 8px; cursor: pointer; font: inherit; }
+  #pop .ti:hover { background: rgba(255, 255, 255, .06); }
+  #pop .ti .n { flex: 0 0 22px; height: 22px; display: grid; place-items: center; border-radius: 50%; border: 1px solid var(--line); font: 600 11px ui-monospace, Menlo, monospace; }
+  #pop .ti .tn { flex: 1 1 auto; }
+  #pop .ti small { display: block; color: var(--ink-dim); font-size: 12px; line-height: 1.3; margin-top: 2px; }
+  #pop .ti .ok { color: #7ee2a8; font-weight: 700; }
+
+  /* --- Aufgaben-Anzeige unten --- */
+  #taskbox { position: fixed; z-index: 2; left: 50%; bottom: calc(10px + env(safe-area-inset-bottom)); transform: translateX(-50%);
+             width: min(440px, calc(100vw - 24px)); box-sizing: border-box; padding: 8px 10px; border-radius: 12px; display: none;
+             background: rgba(8, 20, 38, .82); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); border: 1px solid var(--line); font-size: 13px; }
+  #taskbox.show { display: block; }
+  #taskbox .top { display: flex; align-items: center; gap: 6px; }
+  #taskbox .top b { flex: 1 1 auto; font-weight: 600; color: #fff; }
+  #taskbox .tb { background: transparent; border: 1px solid var(--line); border-radius: 7px; color: var(--ink); padding: 3px 9px; cursor: pointer; font-size: 13px; }
+  #taskbox .tb:hover { background: rgba(255, 255, 255, .06); }
+  #taskbox .prog { height: 4px; border-radius: 2px; background: rgba(255, 255, 255, .1); margin-top: 7px; overflow: hidden; }
+  #taskbox .prog i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+  #taskbox.done .prog i { background: #7ee2a8; }
+  #taskbox.fail .prog i { background: #ff8a7a; }
+  #taskbox .txt { color: var(--ink-dim); font-size: 12px; margin-top: 4px; }
+  #taskbox.done .txt { color: #a6f0c6; }
+
   /* --- Hinweis-Toast (Szenenname, Hilfe) und optionale Statistik --- */
   #toast { position: fixed; left: 50%; top: calc(var(--bar-h) + 10px + env(safe-area-inset-top)); transform: translate(-50%, -6px); z-index: 2;
            max-width: min(460px, calc(100vw - 32px)); padding: 8px 12px; border-radius: 10px; background: rgba(8, 20, 38, .72);
@@ -70,14 +110,16 @@
 <body>
 <canvas id="cv"></canvas>
 <div id="bar" role="toolbar" aria-label="Werkzeuge">
-  <button class="ib on" data-tool="draw" title="Zeichnen" aria-label="Zeichnen"><svg viewBox="0 0 24 24"><path d="M4 20l1-4L16 5l3 3L8 19z"/><path d="M14 7l3 3"/></svg></button>
-  <button class="ib" data-tool="erase" title="Radieren" aria-label="Radieren"><svg viewBox="0 0 24 24"><path d="M9 19L4 14 14 4l6 6-9 9z"/><path d="M9 19h11"/><path d="M7 11l6 6"/></svg></button>
+  <button class="ib on" data-tool="draw" data-pop title="Zeichnen (lange drücken: Dicke)" aria-label="Zeichnen"><svg viewBox="0 0 24 24"><path d="M4 20l1-4L16 5l3 3L8 19z"/><path d="M14 7l3 3"/></svg><span class="dot"></span></button>
+  <button class="ib" data-tool="erase" data-pop title="Radieren (lange drücken: Größe)" aria-label="Radieren"><svg viewBox="0 0 24 24"><path d="M9 19L4 14 14 4l6 6-9 9z"/><path d="M9 19h11"/><path d="M7 11l6 6"/></svg><span class="dot"></span></button>
   <button class="ib" data-tool="ball" title="Ball setzen" aria-label="Ball setzen"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7.5"/><path d="M12 12l5.3-5.3"/></svg></button>
   <button class="ib" data-tool="pour" title="Schütten (gedrückt halten)" aria-label="Schütten"><svg viewBox="0 0 24 24"><path d="M4 6l10-2 2 9-8 2z"/><path d="M16 13l2 1"/><path d="M18 17v1.5M15 19v1.5M20.5 19.5v1"/></svg></button>
   <span class="sep"></span>
   <button class="ib" id="mat" title="Material: Wasser" aria-label="Material wechseln"><svg viewBox="0 0 24 24" id="matIcon"></svg></button>
   <button class="ib on" id="rain" title="Regen an/aus" aria-label="Regen an/aus"><svg viewBox="0 0 24 24"><path d="M7 14a4 4 0 0 1 .4-8 5 5 0 0 1 9.4 1.6A3.2 3.2 0 0 1 17 14z"/><path d="M8.5 17l-1 3M12.5 17l-1 3M16.5 17l-1 3"/></svg></button>
   <span class="grow"></span>
+  <button class="ib" id="tasks" data-pop title="Aufgaben" aria-label="Aufgaben"><svg viewBox="0 0 24 24"><path d="M5 21V4"/><path d="M5 4h12l-2.5 4L17 12H5"/></svg></button>
+  <button class="ib" id="view" title="Ansicht: Start / ganze Welt (Taste 0)" aria-label="Ansicht"><svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/><circle cx="12" cy="12" r="2.2"/></svg></button>
   <button class="ib" id="undo" title="Rückgängig" aria-label="Rückgängig"><svg viewBox="0 0 24 24"><path d="M9 5L4 10l5 5"/><path d="M4 10h10a5 5 0 0 1 0 10h-3"/></svg></button>
   <button class="ib" id="scene" title="Nächste Demo" aria-label="Nächste Demo"><svg viewBox="0 0 24 24"><path d="M4 6l7 6-7 6z"/><path d="M12 6l7 6-7 6z"/></svg><span class="badge" id="sceneNo"></span></button>
   <button class="ib" id="pause" title="Pause" aria-label="Pause"><svg viewBox="0 0 24 24" id="pauseIcon"><path d="M9 5v14M15 5v14"/></svg></button>
@@ -121,8 +163,22 @@
     <button class="btn" id="reset">Alles löschen</button>
     <button class="btn" id="defaults">Standardwerte</button>
   </div>
-  <p class="hint" style="margin-top:14px"><b>Zeichne</b> mit Maus oder Finger: ein U fängt Wasser, eine Schräge leitet ab, ein Ball rollt.
-  Das Verhalten ergibt sich aus der Simulation, nicht aus einer Formerkennung. Maßstab: 1 m = 250 px.</p>
+  <h3>Bedienung</h3>
+  <p class="hint"><b>Zeichne</b> mit Maus oder Finger: ein U fängt Wasser, eine Schräge leitet ab, ein Ball rollt.
+  <b>Lange drücken</b> (Maus: Rechtsklick oder 2. Klick) auf Stift oder Radierer: drei Größen. Der Radierer schneidet nur dort, wo du wischst.</p>
+  <p class="hint"><b>Zoom:</b> zwei Finger auseinanderziehen bzw. Mausrad, Tasten + / −. <b>Verschieben:</b> zwei Finger bzw. rechte Maustaste oder Leertaste + Ziehen.
+  Taste 0 oder das Rahmen-Symbol: Startansicht ↔ ganze Welt.</p>
+  <p class="hint"><b>Aufgaben</b> (Fahne): fünf Ziele; bernsteinfarbene Striche gehören zur Aufgabe und sind nicht radierbar.
+  Das Verhalten ergibt sich aus der Simulation, nicht aus einer Formerkennung. Maßstab: 1 m = 250 px (Raster).</p>
+</div>
+<div id="pop" role="menu"></div>
+<div id="taskbox" role="status">
+  <div class="top"><b id="tbName"></b>
+    <button class="tb" id="tbNext" title="Nächste Aufgabe">Weiter →</button>
+    <button class="tb" id="tbRe" title="Neu starten" aria-label="Neu starten">↻</button>
+    <button class="tb" id="tbX" title="Aufgabe beenden" aria-label="Aufgabe beenden">×</button></div>
+  <div class="prog"><i id="tbBar"></i></div>
+  <div class="txt" id="tbTxt"></div>
 </div>
 <div id="toast"></div>
 <div id="hud"></div>
@@ -136,7 +192,7 @@ function createSim(W, H) {
   const PPM = 250;
   const G = 9.81 * PPM;
   let SUB = 8;              // Substeps pro Frame (Kompression einer Wassersäule ~ G·h², daher 8 statt 4)
-  const RS = 5;             // Strichradius (halbe Dicke) in px
+  const RS = 5;             // Standard-Strichradius (halbe Dicke) in px; jeder Strich hat seinen eigenen (s.rad)
   const CELL = 14;          // Partikelgitter (>= Kernelradius HK des Wasserdrucks)
   const SCELL = 32;         // Strichgitter
   const MARGIN = 64;
@@ -163,8 +219,8 @@ function createSim(W, H) {
   S.balls = [];
 
   // --- Striche ---
-  S.strokes = [];       // {id, pts:[[x,y],...]}
-  let segAx = new Float32Array(0), segAy = segAx, segBx = segAx, segBy = segAx;
+  S.strokes = [];       // {id, pts:[[x,y],...], rad, fixed}
+  let segAx = new Float32Array(0), segAy = segAx, segBx = segAx, segBy = segAx, segR = segAx;
   let nSeg = 0;
   let sgCols = 0, sgRows = 0, segGrid = [];
   let nextId = 1;
@@ -178,7 +234,7 @@ function createSim(W, H) {
   let wCols = 0, wRows = 0, occ = null, shelter = null, shelterSign = 0, shelterDirty = true;
 
   // --- Partikelgitter ---
-  let gCols, gRows, cellStart, cellCount, cellIdx = new Int32Array(MAXP), pCell = new Int32Array(MAXP);
+  let gCols, gRows, cellStart, cellCount, cellIdx = new Int32Array(MAXP), pCell = new Int32Array(MAXP), nGrid = 0;
 
   S.resize = function (w, h) {
     W = w; H = h; S.W = w; S.H = h;
@@ -191,16 +247,16 @@ function createSim(W, H) {
   function rebuildSegments() {
     nSeg = 0;
     for (const s of S.strokes) nSeg += s.pts.length - 1;
-    segAx = new Float32Array(nSeg); segAy = new Float32Array(nSeg); segBx = new Float32Array(nSeg); segBy = new Float32Array(nSeg);
+    segAx = new Float32Array(nSeg); segAy = new Float32Array(nSeg); segBx = new Float32Array(nSeg); segBy = new Float32Array(nSeg); segR = new Float32Array(nSeg);
     let k = 0;
     for (const s of S.strokes) for (let i = 0; i < s.pts.length - 1; i++) {
-      segAx[k] = s.pts[i][0]; segAy[k] = s.pts[i][1]; segBx[k] = s.pts[i + 1][0]; segBy[k] = s.pts[i + 1][1]; k++;
+      segAx[k] = s.pts[i][0]; segAy[k] = s.pts[i][1]; segBx[k] = s.pts[i + 1][0]; segBy[k] = s.pts[i + 1][1]; segR[k] = s.rad; k++;
     }
     sgCols = Math.ceil((W + 2 * MARGIN) / SCELL); sgRows = Math.ceil((H + 2 * MARGIN) / SCELL);
     segGrid = new Array(sgCols * sgRows);
     for (let i = 0; i < segGrid.length; i++) segGrid[i] = [];
-    const pad = RS + 4 + 10;
     for (let s = 0; s < nSeg; s++) {
+      const pad = segR[s] + 4 + 10;
       const c0 = sgc(Math.min(segAx[s], segBx[s]) - pad), c1 = sgc(Math.max(segAx[s], segBx[s]) + pad);
       const r0 = sgr(Math.min(segAy[s], segBy[s]) - pad), r1 = sgr(Math.max(segAy[s], segBy[s]) + pad);
       for (let rr = r0; rr <= r1; rr++) for (let cc = c0; cc <= c1; cc++) segGrid[rr * sgCols + cc].push(s);
@@ -210,28 +266,72 @@ function createSim(W, H) {
   function sgc(v) { return Math.max(0, Math.min(sgCols - 1, Math.floor((v + MARGIN) / SCELL))); }
   function sgr(v) { return Math.max(0, Math.min(sgRows - 1, Math.floor((v + MARGIN) / SCELL))); }
 
-  S.addStroke = function (pts) {
-    const s = { id: nextId++, pts };
+  // o: {rad, id, fixed}. fixed = Teil einer Aufgabe (nicht radierbar, nicht rückgängig)
+  S.addStroke = function (pts, o) {
+    o = o || {};
+    const s = { id: o.id || nextId++, pts, rad: o.rad || RS, fixed: !!o.fixed };
     S.strokes.push(s);
     rebuildSegments();
-    // Partikel, die jetzt in der Wand liegen, entfernen (sonst "explodiert" das Wasser)
-    for (let i = S.n - 1; i >= 0; i--) {
-      for (let k = 0; k < pts.length - 1; k++) {
-        if (distSeg(x[i], y[i], pts[k][0], pts[k][1], pts[k + 1][0], pts[k + 1][1]) < RS + r[i]) { removeP(i); break; }
-      }
-    }
+    clearInside([s]);
     return s.id;
   };
+  // Partikel, die jetzt in der Wand liegen, entfernen (sonst "explodiert" das Wasser)
+  function clearInside(list) {
+    for (let i = S.n - 1; i >= 0; i--) {
+      out: for (const s of list) {
+        const pts = s.pts;
+        for (let k = 0; k < pts.length - 1; k++)
+          if (distSeg(x[i], y[i], pts[k][0], pts[k][1], pts[k + 1][0], pts[k + 1][1]) < s.rad + r[i]) { removeP(i); break out; }
+      }
+    }
+  }
   S.removeStroke = function (id) {
     S.strokes = S.strokes.filter(s => s.id !== id); rebuildSegments();
   };
-  S.strokeAt = function (qx, qy, rad) {
-    for (let j = S.strokes.length - 1; j >= 0; j--) {
-      const p = S.strokes[j].pts;
-      for (let k = 0; k < p.length - 1; k++) if (distSeg(qx, qy, p[k][0], p[k][1], p[k + 1][0], p[k + 1][1]) < rad + RS) return S.strokes[j].id;
-    }
-    return 0;
+  // Rückgängig fürs Radieren: Teilstücke weg, Originale (mit alter id) zurück – ein Neuaufbau
+  S.swapStrokes = function (removeIds, restore) {
+    const rm = new Set(removeIds);
+    S.strokes = S.strokes.filter(s => !rm.has(s.id)).concat(restore);
+    rebuildSegments(); clearInside(restore);
   };
+  // Radieren nur dort, wo der Radierer ist: jeder Strich wird am Kreis (X,Y,R) aufgeschnitten.
+  // Liefert {removed, added} (Strich-Objekte), damit die UI das rückgängig machen kann.
+  S.eraseCircle = function (X, Y, R) {
+    const removed = [], added = [], out = [];
+    for (const s of S.strokes) {
+      const pieces = s.fixed ? null : cutStroke(s.pts, X, Y, R + s.rad);
+      if (!pieces) { out.push(s); continue; }
+      removed.push(s);
+      for (const p of pieces) { const ns = { id: nextId++, pts: p, rad: s.rad, fixed: false }; out.push(ns); added.push(ns); }
+    }
+    if (removed.length) { S.strokes = out; rebuildSegments(); }
+    return { removed, added };
+  };
+  // Polylinie gegen Kreis schneiden: null = unberührt, sonst Liste der verbleibenden Stücke
+  function cutStroke(pts, cx, cy, R) {
+    let x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+    for (const q of pts) { if (q[0] < x0) x0 = q[0]; if (q[0] > x1) x1 = q[0]; if (q[1] < y0) y0 = q[1]; if (q[1] > y1) y1 = q[1]; }
+    if (cx < x0 - R || cx > x1 + R || cy < y0 - R || cy > y1 + R) return null;
+    const R2 = R * R, runs = [];
+    let touched = false;
+    const inside = q => (q[0] - cx) ** 2 + (q[1] - cy) ** 2 < R2;
+    let cur = inside(pts[0]) ? (touched = true, []) : [pts[0]];
+    for (let k = 0; k < pts.length - 1; k++) {
+      const a = pts[k], b = pts[k + 1], dx = b[0] - a[0], dy = b[1] - a[1], fx = a[0] - cx, fy = a[1] - cy;
+      const A = dx * dx + dy * dy, B = 2 * (fx * dx + fy * dy), C = fx * fx + fy * fy - R2;
+      let t0 = 2, t1 = 2;
+      if (A > 1e-9) { const D = B * B - 4 * A * C; if (D > 0) { const sq = Math.sqrt(D); t0 = (-B - sq) / (2 * A); t1 = (-B + sq) / (2 * A); } }
+      else if (C < 0) { t0 = -1; t1 = 2; }
+      if (t1 <= 0 || t0 >= 1) { if (cur.length) cur.push(b); else cur = [b]; continue; }   // Segment außerhalb
+      touched = true;
+      if (t0 > 0) { cur.push([a[0] + dx * t0, a[1] + dy * t0]); }
+      if (cur.length >= 2) runs.push(cur);
+      cur = t1 < 1 ? [[a[0] + dx * t1, a[1] + dy * t1], b] : [];
+    }
+    if (!touched) return null;
+    if (cur.length >= 2) runs.push(cur);
+    return runs.filter(p => { let L = 0; for (let i = 1; i < p.length; i++) L += Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1]); return L > 1.5; });
+  }
   function distSeg(qx, qy, ax, ay, bx, by) {
     const abx = bx - ax, aby = by - ay; const l2 = abx * abx + aby * aby;
     let t = l2 > 0 ? ((qx - ax) * abx + (qy - ay) * aby) / l2 : 0; t = t < 0 ? 0 : t > 1 ? 1 : t;
@@ -267,15 +367,17 @@ function createSim(W, H) {
       const cell = rr * gCols + cc;
       for (let q = cellStart[cell]; q < cellStart[cell + 1]; q++) { const i = cellIdx[q]; if (i >= S.n) continue; const dx = x[i] - X, dy = y[i] - Y; if (dx * dx + dy * dy < (rad + r[i]) ** 2) return false; }
     }
+    // seit dem letzten Gitteraufbau neu erzeugte Tropfen stehen noch nicht im Gitter -> direkt prüfen
+    for (let i = nGrid; i < S.n; i++) { const dx = x[i] - X, dy = y[i] - Y; if (dx * dx + dy * dy < (rad + r[i]) ** 2) return false; }
     for (const b of S.balls) { const dx = b.x - X, dy = b.y - Y; if (dx * dx + dy * dy < (rad + b.r) ** 2) return false; }
     const sc = segGrid[sgr(Y) * sgCols + sgc(X)];
-    for (const s of sc) if (distSeg(X, Y, segAx[s], segAy[s], segBx[s], segBy[s]) < RS + rad) return false;
+    for (const s of sc) if (distSeg(X, Y, segAx[s], segAy[s], segBx[s], segBy[s]) < segR[s] + rad) return false;
     return true;
   };
   // liegt (X,Y) mit Radius rad in einem Strich?
   S.nearStroke = function (X, Y, rad) {
     const sc = segGrid[sgr(Y) * sgCols + sgc(X)];
-    for (const s of sc) if (distSeg(X, Y, segAx[s], segAy[s], segBx[s], segBy[s]) < RS + rad + 0.5) return true;
+    for (const s of sc) if (distSeg(X, Y, segAx[s], segAy[s], segBx[s], segBy[s]) < segR[s] + rad + 0.5) return true;
     return false;
   };
   // Fläche (Polygon) mit Partikeln im Dreiecksgitter füllen – überlappungsfrei, damit nichts explodiert
@@ -302,7 +404,8 @@ function createSim(W, H) {
   // e = Stoßzahl gegen Striche (0 = unelastisch wie bisher)
   S.addBall = function (X, Y, R, dens, e) {
     const m = dens * Math.PI * R * R;
-    S.balls.push({ x: X, y: Y, px: X, py: Y, vx: 0, vy: 0, r: R, dens, m, im: 1 / m, I: 0.5 * m * R * R, w: 0, ang: 0, cn: [], sub: 0, wvx: 0, wvy: 0, e: e || 0, mu: 0.6, v0x: 0, v0y: 0 });
+    const b = { x: X, y: Y, px: X, py: Y, vx: 0, vy: 0, r: R, dens, m, im: 1 / m, I: 0.5 * m * R * R, w: 0, ang: 0, cn: [], sub: 0, wvx: 0, wvy: 0, e: e || 0, mu: 0.6, v0x: 0, v0y: 0 };
+    S.balls.push(b); return b;
   };
 
   // ================= Wind =================
@@ -342,7 +445,7 @@ function createSim(W, H) {
     return rr * gCols + c;
   }
   function buildGrid() {
-    cellCount.fill(0);
+    cellCount.fill(0); nGrid = S.n;
     for (let i = 0; i < S.n; i++) { const c = cellOf(x[i], y[i]); pCell[i] = c; cellCount[c]++; }
     let acc = 0;
     for (let c = 0; c < cellCount.length; c++) { cellStart[c] = acc; acc += cellCount[c]; }
@@ -354,7 +457,6 @@ function createSim(W, H) {
   // ================= Constraints =================
   let doFric = true;
   // Vorstabilisierung nur für Sand-Kontakte (stabile Haufen); Wasser braucht sie nicht
-  function pairPre(i, j) { if (type[i] === 0 && type[j] === 0) return; pair(i, j, false); }
   // Harte Kontakte: Sand-Sand, Sand-Wasser (Wasser-Wasser läuft über den Dichtedruck, siehe pairAll)
   function pairPre(i, j) { if (type[i] === 0 && type[j] === 0) return; pair(i, j, false); }
   function pair(i, j, count) {
@@ -496,7 +598,7 @@ function createSim(W, H) {
       const abx = segBx[s] - segAx[s], aby = segBy[s] - segAy[s]; const l2 = abx * abx + aby * aby;
       let t = l2 > 0 ? ((x[i] - segAx[s]) * abx + (y[i] - segAy[s]) * aby) / l2 : 0; t = t < 0 ? 0 : t > 1 ? 1 : t;
       const qx = segAx[s] + t * abx, qy = segAy[s] + t * aby;
-      let dx = x[i] - qx, dy = y[i] - qy; let d = Math.sqrt(dx * dx + dy * dy); const R = RS + r[i];
+      let dx = x[i] - qx, dy = y[i] - qy; let d = Math.sqrt(dx * dx + dy * dy); const R = segR[s] + r[i];
       if (d >= R) continue;
       let nx, ny;
       if (d < 1e-6) { const l = Math.sqrt(l2) || 1; nx = -aby / l; ny = abx / l; } else { nx = dx / d; ny = dy / d; }
@@ -526,7 +628,7 @@ function createSim(W, H) {
         const abx = segBx[s] - segAx[s], aby = segBy[s] - segAy[s]; const l2 = abx * abx + aby * aby;
         let t = l2 > 0 ? ((b.x - segAx[s]) * abx + (b.y - segAy[s]) * aby) / l2 : 0; t = t < 0 ? 0 : t > 1 ? 1 : t;
         const qx = segAx[s] + t * abx, qy = segAy[s] + t * aby;
-        const dx = b.x - qx, dy = b.y - qy; const d = Math.sqrt(dx * dx + dy * dy); const R = RS + b.r;
+        const dx = b.x - qx, dy = b.y - qy; const d = Math.sqrt(dx * dx + dy * dy); const R = segR[s] + b.r;
         if (d >= R || d < 1e-6) continue;
         const nx = dx / d, ny = dy / d, pen = R - d;
         b.x += nx * pen; b.y += ny * pen;
@@ -774,7 +876,94 @@ const SCENES = [
       emitters: [{ x: (xa + xb) / 2, y: yt, mat: 0, rate: 60, total: 1e9, vx: 0, vy: 200, spread: (xb - xa) * 0.3 }] };
   },
 ];
-if (typeof module !== 'undefined') module.exports = { createSim, SCENES };
+
+// ===== Aufgaben =====
+// Wie Szenen, zusätzlich: zones (Zielbereiche), check(st) -> {p: Fortschritt 0..1, txt, ok, fail}, hold (s, so lange
+// muss ok gelten), tick(st, dt) für Ereignisse. Feste Striche ({fixed:true}) kann der Spieler nicht radieren.
+// st: count(zone, mat), ball (Ziel-Ball), spawnBall(x, y, r, dens), removeBall(b), t (Zeit seit Start), sim
+// Quelle mit jet: n = n Tropfen nebeneinander (12 px Abstand) pro Bild, schnell (vy). Ein dichter, langsamer Strahl
+// würde in der Luft zerstäuben: das Dichtemodell stößt Tropfen unter ~12 px Abstand ab, Oberflächenspannung fehlt.
+const clampN = (v, a, b) => Math.max(a, Math.min(b, v));
+const FIX = { fixed: true };
+const TASKS = [
+  // 1) Becher füllen: einfache Rinne bauen
+  function becher(sim, W, H, top) {
+    const sx = W * 0.14, sy = top + H * 0.07;
+    const cw = Math.min(W * 0.32, 260), ch = Math.min(H * 0.18, 140), cx0 = W * 0.93 - cw, cy1 = H - 30;
+    sim.addStroke([[cx0, cy1 - ch], [cx0, cy1], [cx0 + cw, cy1], [cx0 + cw, cy1 - ch]], FIX);
+    const need = Math.round(clampN(cw * ch * 0.5 / sim.waterArea, 120, 500));
+    return { name: 'Becher füllen', desc: 'Zeichne eine Rinne, die das Wasser in den Becher leitet.',
+      emitters: [{ x: sx, y: sy, mat: 0, jet: 3, total: 1e9, vy: 600 }],
+      zones: [{ x: cx0 + 4, y: cy1 - ch, w: cw - 8, h: ch - 4 }], hold: 1,
+      check: st => { const n = st.count(0, 0); return { p: n / need, txt: `${n} / ${need} Tropfen`, ok: n >= need }; } };
+  },
+
+  // 2) Ball ins Ziel: Bahn über die Mauer in den Korb
+  function ballZiel(sim, W, H, top) {
+    const R = Math.min(15, W * 0.04), bx = W * 0.1, by = top + H * 0.1;
+    const kx0 = W * 0.68, kx1 = W * 0.95, ky = H - 30;
+    sim.addStroke([[W * 0.56, top + H * 0.42], [W * 0.56, H - 30]], FIX);                    // Mauer
+    sim.addStroke([[kx0, ky - 70], [kx0, ky], [kx1, ky], [kx1, top + H * 0.3]], FIX);     // Korb mit hoher Rückwand (fängt zu schnelle Bälle)
+    let still = 0;
+    return { name: 'Ball ins Ziel', desc: 'Der Ball fällt links herunter. Bau eine Bahn über die Mauer in den Korb.',
+      zones: [{ x: kx0 + 4, y: ky - 70, w: kx1 - kx0 - 8, h: 66 }], hold: 0.5,
+      tick: (st, dt) => {
+        const b = st.ball;
+        if (!b) { st.spawnBall(bx, by, R, 3); still = 0; return; }
+        // liegt der Ball still außerhalb des Ziels -> neuer Ball
+        if (Math.hypot(b.vx, b.vy) < 15 && !st.inZone(0, b)) { still += dt; if (still > 3) st.removeBall(b); } else still = 0;
+      },
+      check: st => { const b = st.ball, ok = !!b && st.inZone(0, b) && Math.hypot(b.vx, b.vy) < 60;
+        return { p: ok ? 1 : 0, txt: ok ? 'im Korb!' : 'Ball noch nicht im Korb', ok }; } };
+  },
+
+  // 3) Boot heben: Wasser in den Schacht leiten, bis der Ball über die Linie schwimmt
+  function bootHeben(sim, W, H, top) {
+    const sw = clampN(W * 0.16, 70, 150), sx0 = W * 0.62 - sw / 2, sx1 = sx0 + sw, sTop = top + H * 0.36, sBot = H - 30;
+    const lineY = sTop + (sBot - sTop) * 0.22, R = Math.min(20, sw * 0.28);
+    sim.addStroke([[sx0, sTop], [sx0, sBot], [sx1, sBot], [sx1, sTop]], FIX);
+    const sx = W * 0.12, sy = top + H * 0.07;
+    return { name: 'Boot heben', desc: 'Leite Wasser in den Schacht, bis der Ball über die gestrichelte Linie schwimmt.',
+      emitters: [{ x: sx, y: sy, mat: 0, jet: 3, total: 1e9, vy: 600 }],
+      zones: [{ x: sx0 - 16, y: lineY, w: sw + 32, h: 0, line: true }], hold: 1,
+      fill: st => st.spawnBall((sx0 + sx1) / 2, sBot - R - 8, R, 0.5),
+      check: st => { const b = st.ball; if (!b) return { p: 0, txt: '', ok: false };
+        const p = clampN((sBot - R - b.y) / (sBot - R - lineY), 0, 1);
+        return { p, txt: `Höhe ${Math.round(p * 100)} %`, ok: b.y < lineY }; } };
+  },
+
+  // 4) Sandburg im Wind: Windschutz bauen, bevor der Sturm kommt
+  function sandburg(sim, W, H, top) {
+    const fy = H - 40, cx = W * 0.68, base = Math.min(W * 0.3, 160), hgt = Math.min(base * 0.55, H * 0.2);
+    sim.addStroke([[W * 0.30, fy], [W * 0.97, fy]], FIX);
+    const WARN = 6, LAST = 15;
+    let n0 = 0;
+    return { name: 'Sandburg im Wind', desc: `In ${WARN} s kommt Sturm von links. Bau dicht davor einen Schutz, damit mindestens 70 % der Burg ${LAST} s stehen bleiben.`,
+      zones: [{ x: cx - base * 0.75, y: fy - hgt * 1.6, w: base * 1.5, h: hgt * 1.6 }],
+      fill: () => sim.fillPoly(1, [[cx - base / 2, fy - 6], [cx + base / 2, fy - 6], [cx, fy - hgt]], 2500),
+      tick: st => { const s = st.sim; s.gusts = true; s.wind = st.t < WARN ? 0 : 8; },
+      check: st => {
+        if (st.t < WARN) { n0 = st.count(0, 1); return { p: 0, txt: `Sturm in ${Math.ceil(WARN - st.t)} s – bau einen Schutz!`, ok: false }; }
+        const f = n0 ? st.count(0, 1) / n0 : 0, t = st.t - WARN;
+        if (f < 0.7) return { p: t / LAST, txt: `Nur noch ${Math.round(f * 100)} % – weggeweht!`, ok: false, fail: true };
+        return { p: t / LAST, txt: `${Math.round(f * 100)} % stehen · noch ${Math.max(0, Math.ceil(LAST - t))} s`, ok: t >= LAST };
+      } };
+  },
+
+  // 5) Gerecht teilen: ein Strahl, zwei Becher
+  function teilen(sim, W, H, top) {
+    const cw = Math.min(W * 0.28, 220), ch = Math.min(H * 0.16, 120), cy1 = H - 30, a0 = W * 0.05, b0 = W * 0.95 - cw;
+    sim.addStroke([[a0, cy1 - ch], [a0, cy1], [a0 + cw, cy1], [a0 + cw, cy1 - ch]], FIX);
+    sim.addStroke([[b0, cy1 - ch], [b0, cy1], [b0 + cw, cy1], [b0 + cw, cy1 - ch]], FIX);
+    const need = Math.round(clampN(cw * ch * 0.4 / sim.waterArea, 80, 350));
+    return { name: 'Gerecht teilen', desc: 'Ein Strahl, zwei Becher: Teile das Wasser so auf, dass beide voll genug werden.',
+      emitters: [{ x: W * 0.5, y: top + H * 0.07, mat: 0, jet: 3, total: 1e9, vy: 600 }],
+      zones: [{ x: a0 + 4, y: cy1 - ch, w: cw - 8, h: ch - 4 }, { x: b0 + 4, y: cy1 - ch, w: cw - 8, h: ch - 4 }], hold: 1,
+      check: st => { const a = st.count(0, 0), b = st.count(1, 0);
+        return { p: Math.min(a, b) / need, txt: `links ${a} · rechts ${b} / je ${need}`, ok: a >= need && b >= need }; } };
+  },
+];
+if (typeof module !== 'undefined') module.exports = { createSim, SCENES, TASKS };
 
 </script>
 <script>
@@ -782,25 +971,62 @@ if (typeof module !== 'undefined') module.exports = { createSim, SCENES };
   const cv = document.getElementById('cv');
   const ctx = cv.getContext('2d');
   const $ = id => document.getElementById(id);
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   let DPR = Math.min(window.devicePixelRatio || 1, 2);
   let W = window.innerWidth, H = window.innerHeight;
-  const sim = createSim(W, H);
-  const RS = sim.RS;
+
+  // ---------- Welt & Ansicht ----------
+  // Die Welt ist doppelt so breit und hoch wie der Bildschirm beim Start. Die Startansicht (HOME) ist ein
+  // Bildschirm unten in der Mitte; dort werden Demos und Aufgaben aufgebaut. Bildschirm = (Welt - view) · z
+  const W0 = W, H0 = H;
+  const WW = Math.round(Math.max(W0 * 2, 1200)), WH = Math.round(Math.max(H0 * 2, 1000));
+  const HOME = { x: Math.round((WW - W0) / 2), y: WH - H0, w: W0, h: H0 };
+  const sim = createSim(WW, WH);
+  const view = { z: 1, x: HOME.x, y: HOME.y };
+  const MAXZ = 4;
+  const barH = () => $('bar').getBoundingClientRect().bottom;
+  const minZ = () => Math.min(W / WW, (H - barH()) / WH);
+  function clampView() {
+    view.z = clamp(view.z, minZ(), MAXZ);
+    const vw = W / view.z, vh = H / view.z, top = barH() / view.z, usable = vh - top;
+    view.x = vw >= WW ? (WW - vw) / 2 : clamp(view.x, 0, WW - vw);
+    view.y = usable >= WH ? -top - (usable - WH) / 2 : clamp(view.y, -top, WH - vh);
+  }
+  function zoomAt(sx, sy, f) {
+    const wx = sx / view.z + view.x, wy = sy / view.z + view.y;
+    view.z = clamp(view.z * f, minZ(), MAXZ);
+    view.x = wx - sx / view.z; view.y = wy - sy / view.z; clampView();
+  }
+  function homeView() {
+    view.z = clamp(Math.min(W / HOME.w, H / HOME.h), minZ(), MAXZ);
+    view.x = HOME.x + HOME.w / 2 - W / 2 / view.z; view.y = HOME.y + HOME.h / 2 - H / 2 / view.z; clampView();
+  }
+  const isHome = () => Math.abs(view.z - Math.min(W / HOME.w, H / HOME.h)) < 0.02 && Math.abs(view.x + W / 2 / view.z - HOME.x - HOME.w / 2) < 20;
+  // Bildschirmpunkt relativ zur Zeichenfläche (nicht clientX direkt: so stimmt es auch, wenn die Fläche verschoben/skaliert ist)
+  function local(e) { const r = cv.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; }
+  const toWorld = (sx, sy) => [sx / view.z + view.x, sy / view.z + view.y];
 
   function resize() {
     W = window.innerWidth; H = window.innerHeight; DPR = Math.min(window.devicePixelRatio || 1, 2);
+    // CSS-Größe in px statt 100vw/100vh: auf dem Handy ist 100vh die Höhe OHNE Adressleiste; die Zeichenfläche
+    // wurde dadurch senkrecht gestreckt und die Linie lag je nach Adressleiste versetzt unter dem Finger.
+    cv.style.width = W + 'px'; cv.style.height = H + 'px';
     cv.width = Math.round(W * DPR); cv.height = Math.round(H * DPR);
-    sim.resize(W, H);
+    clampView();
   }
-  window.addEventListener('resize', resize); resize();
-  const barBottom = () => $('bar').getBoundingClientRect().bottom;
+  window.addEventListener('resize', resize);
+  if (window.visualViewport) window.visualViewport.addEventListener('resize', resize);
+  resize();
 
   // ---------- Einstellungen (persistent, falls der Browser es erlaubt) ----------
-  const DEFAULTS = { maxP: 5000, auto: true, damp: 50, sub: 8, rate: 150, wind: 0, gust: true, bdens: 0.5, bsize: 22, hud: false, debug: false, mat: 0 };
-  const KEY = 'drawflow.settings.v1';
+  const PEN = [3, 5, 9], ERASER = [8, 16, 30], SIZE_NAMES = ['Dünn', 'Mittel', 'Dick'];
+  const DEFAULTS = { maxP: 5000, auto: true, damp: 50, sub: 8, rate: 150, wind: 0, gust: true, bdens: 0.5, bsize: 22, hud: false, debug: false, mat: 0, pen: 1, eraser: 1 };
+  const KEY = 'drawflow.settings.v1', TKEY = 'drawflow.tasks.v1';
   let set = { ...DEFAULTS };
   try { Object.assign(set, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) { /* privat/gesperrt */ }
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(set)); } catch (e) { } };
+  let solved = [];
+  try { solved = JSON.parse(localStorage.getItem(TKEY) || '[]'); } catch (e) { }
 
   const ui = { tool: 'draw', rain: true, paused: false };
   const undo = [];
@@ -808,9 +1034,8 @@ if (typeof module !== 'undefined') module.exports = { createSim, SCENES };
   function apply() {
     sim.setDamping(set.damp / 100);
     sim.setSub(set.sub);
-    sim.wind = set.wind; sim.gusts = set.gust;
+    if (!(scene && scene.m.tick && scene.task >= 0)) { sim.wind = set.wind; sim.gusts = set.gust; }   // Aufgaben dürfen Wind vorgeben
     if (!set.auto || sim.maxP > set.maxP) sim.maxP = set.maxP;
-    // Oberfläche
     $('maxP').value = set.maxP; $('maxPv').textContent = set.maxP.toLocaleString('de-DE');
     $('auto').checked = set.auto;
     $('damp').value = set.damp; $('dampv').textContent = set.damp + ' %';
@@ -824,6 +1049,11 @@ if (typeof module !== 'undefined') module.exports = { createSim, SCENES };
       ? '<path d="M12 3.5c3.2 4.2 5.6 7.2 5.6 10a5.6 5.6 0 0 1-11.2 0c0-2.8 2.4-5.8 5.6-10z"/>'
       : '<circle cx="7" cy="17" r="1.6"/><circle cx="12" cy="17" r="1.6"/><circle cx="17" cy="17" r="1.6"/><circle cx="9.5" cy="12.6" r="1.6"/><circle cx="14.5" cy="12.6" r="1.6"/><circle cx="12" cy="8.2" r="1.6"/>';
     $('mat').title = 'Material: ' + (set.mat === 0 ? 'Wasser' : 'Sand');
+    // Größen-Punkt im Stift-/Radierer-Symbol
+    for (const [t, k] of [['draw', 'pen'], ['erase', 'eraser']]) {
+      const d = document.querySelector(`[data-tool=${t}] .dot`), px = [3, 5, 8][set[k]];
+      d.style.width = d.style.height = px + 'px';
+    }
     save();
   }
   const bindRange = (id, key) => $(id).addEventListener('input', e => {
@@ -835,19 +1065,70 @@ if (typeof module !== 'undefined') module.exports = { createSim, SCENES };
   const bindCheck = (id, key) => $(id).addEventListener('change', e => { set[key] = e.target.checked; if (key === 'auto' && set.auto) sim.maxP = set.maxP; apply(); });
   bindCheck('auto', 'auto'); bindCheck('gust', 'gust'); bindCheck('hudOn', 'hud'); bindCheck('dbg', 'debug');
   for (const id of ['sub', 'bdens', 'bsize']) $(id).addEventListener('click', e => { const b = e.target.closest('button'); if (b) { set[id] = +b.dataset.v; apply(); } });
-  $('defaults').onclick = () => { set = { ...DEFAULTS, mat: set.mat }; sim.maxP = set.maxP; apply(); };
+  $('defaults').onclick = () => { set = { ...DEFAULTS, mat: set.mat, pen: set.pen, eraser: set.eraser }; sim.maxP = set.maxP; apply(); };
+
+  // ---------- Popover (Stiftdicke, Radierergröße, Aufgabenliste) ----------
+  const pop = $('pop'); let popFor = null;
+  function openPop(anchor, html, id) {
+    pop.innerHTML = html; pop.classList.add('open'); popFor = id;
+    const r = anchor.getBoundingClientRect(), pw = pop.offsetWidth;
+    pop.style.left = clamp(r.left + r.width / 2 - pw / 2, 8, window.innerWidth - pw - 8) + 'px';
+    pop.style.top = (barH() + 6) + 'px';
+  }
+  function closePop() { pop.classList.remove('open'); popFor = null; }
+  document.addEventListener('pointerdown', e => { if (popFor && !pop.contains(e.target) && !e.target.closest('[data-pop]') && e.target !== cv) closePop(); });
+  const SIZES = { draw: { key: 'pen', vals: PEN, title: 'Stiftdicke' }, erase: { key: 'eraser', vals: ERASER, title: 'Radierergröße' } };
+  function openSizes(t) {
+    const S = SIZES[t], b = document.querySelector(`[data-tool=${t}]`);
+    const items = S.vals.map((v, i) => {
+      const d = t === 'draw' ? v * 2 : Math.round(v * 0.9);
+      const st = t === 'draw' ? `width:${d}px;height:${d}px` : `width:${d}px;height:${d}px;background:transparent;border:1.5px solid currentColor`;
+      return `<button class="sz${i === set[S.key] ? ' on' : ''}" data-size="${i}" title="${SIZE_NAMES[i]}"><i style="${st}"></i><span>${SIZE_NAMES[i]}</span></button>`;
+    }).join('');
+    openPop(b, `<div class="ptitle">${S.title}</div><div class="sizes">${items}</div>`, t);
+  }
+  function openTasks() {
+    const items = TASK_INFO.map((t, i) => `<button class="ti" data-task="${i}"><span class="n">${i + 1}</span><span class="tn"><b>${t.name}</b><small>${t.desc}</small></span>${solved[i] ? '<span class="ok">✓</span>' : ''}</button>`).join('');
+    openPop($('tasks'), `<div class="ptitle">Aufgaben</div><div class="list">${items}</div>`, 'tasks');
+  }
+  pop.addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    if (b.dataset.size !== undefined) { set[SIZES[popFor].key] = +b.dataset.size; apply(); closePop(); }
+    else if (b.dataset.task !== undefined) { closePop(); loadTask(+b.dataset.task); }
+  });
 
   // ---------- Werkzeugleiste ----------
-  document.querySelectorAll('[data-tool]').forEach(b => b.onclick = () => {
-    ui.tool = b.dataset.tool;
-    document.querySelectorAll('[data-tool]').forEach(o => o.classList.toggle('on', o === b));
+  function selectTool(t) {
+    ui.tool = t;
+    document.querySelectorAll('[data-tool]').forEach(o => o.classList.toggle('on', o.dataset.tool === t));
+  }
+  let lpT = 0, lpFired = false;
+  document.querySelectorAll('[data-tool]').forEach(b => {
+    const t = b.dataset.tool;
+    b.onclick = () => {
+      if (lpFired) { lpFired = false; return; }                     // Loslassen nach Longpress: Menü offen lassen
+      if (SIZES[t] && ui.tool === t) { popFor === t ? closePop() : openSizes(t); return; }   // 2. Tippen: Größe wählen
+      selectTool(t); closePop();
+    };
+    if (!SIZES[t]) return;
+    // Longpress (Finger) bzw. Rechtsklick (Maus) öffnet die drei Größen
+    b.addEventListener('pointerdown', e => {
+      if (e.button !== 0) return;
+      lpFired = false; clearTimeout(lpT);
+      lpT = setTimeout(() => { lpFired = true; selectTool(t); openSizes(t); if (navigator.vibrate) navigator.vibrate(10); }, 420);
+    });
+    for (const ev of ['pointerup', 'pointerleave', 'pointercancel']) b.addEventListener(ev, () => clearTimeout(lpT));
+    b.addEventListener('contextmenu', e => { e.preventDefault(); clearTimeout(lpT); selectTool(t); openSizes(t); });
   });
+  $('bar').addEventListener('contextmenu', e => e.preventDefault());
   $('mat').onclick = () => { set.mat = 1 - set.mat; apply(); toast(set.mat === 0 ? '<b>Wasser</b>' : '<b>Sand</b>', 1200); };
   function setRain(on) { ui.rain = on; $('rain').classList.toggle('on', on); }
   $('rain').onclick = () => setRain(!ui.rain);
   $('undo').onclick = () => {
     const a = undo.pop(); if (!a) return;
-    if (a.t === 's') sim.removeStroke(a.id); else sim.balls = sim.balls.filter(b => b !== a.b);
+    if (a.t === 's') sim.removeStroke(a.id);
+    else if (a.t === 'b') sim.balls = sim.balls.filter(b => b !== a.b);
+    else if (a.t === 'e') { sim.swapStrokes([...a.added], a.removed); sim.balls.push(...a.balls); }
   };
   function setPaused(p) {
     ui.paused = p;
@@ -855,12 +1136,14 @@ if (typeof module !== 'undefined') module.exports = { createSim, SCENES };
     $('pause').classList.toggle('on', p); $('pause').title = p ? 'Weiter' : 'Pause';
   }
   $('pause').onclick = () => setPaused(!ui.paused);
+  $('view').onclick = () => { if (isHome()) { view.z = minZ(); clampView(); toast('<b>Ganze Welt</b>', 1000); } else { homeView(); toast('<b>Startansicht</b>', 1000); } };
+  $('tasks').onclick = () => popFor === 'tasks' ? closePop() : openTasks();
   const sheet = $('sheet');
   $('gear').onclick = () => { const o = !sheet.classList.contains('open'); sheet.classList.toggle('open', o); $('gear').classList.toggle('on', o); };
   $('close').onclick = () => { sheet.classList.remove('open'); $('gear').classList.remove('on'); };
-  $('clearP').onclick = () => { sim.clearParticles(); scene = null; };
-  $('reset').onclick = resetAll;
-  function resetAll() { sim.clearParticles(); sim.balls = []; for (const s of [...sim.strokes]) sim.removeStroke(s.id); undo.length = 0; scene = null; }
+  $('clearP').onclick = () => { sim.clearParticles(); endScene(); };
+  $('reset').onclick = () => { resetAll(); endScene(); };
+  function resetAll() { sim.clearParticles(); sim.balls = []; sim.swapStrokes(sim.strokes.map(s => s.id), []); undo.length = 0; scene = null; }
 
   // ---------- Hinweis-Toast ----------
   let toastT = 0;
@@ -869,28 +1152,83 @@ if (typeof module !== 'undefined') module.exports = { createSim, SCENES };
     clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), ms || 4000);
   }
 
-  // ---------- Demo-Szenen (5 Stück, Taste schaltet reihum weiter) ----------
+  // ---------- Demo-Szenen und Aufgaben ----------
+  // Beide werden im HOME-Bereich aufgebaut: ein Stellvertreter-Objekt (erbt von sim) verschiebt alle Koordinaten.
+  const TASK_INFO = TASKS.map(f => { const m = f(createSim(400, 800), 400, 800, 44); return { name: m.name, desc: m.desc }; });
   let sceneIdx = -1, scene = null;
-  function loadScene(k) {
+  function build(fn, taskIdx) {
     resetAll();
-    sceneIdx = (k + SCENES.length) % SCENES.length;
-    const nS = sim.strokes.length, nB = sim.balls.length;
-    const m = SCENES[sceneIdx](sim, W, H, barBottom());
-    if (m.fill) m.fill();
-    for (const s of sim.strokes.slice(nS)) undo.push({ t: 's', id: s.id });
-    for (const b of sim.balls.slice(nB)) undo.push({ t: 'b', b });
+    const ox = HOME.x, oy = HOME.y, off = pts => pts.map(q => [q[0] + ox, q[1] + oy]);
+    const P = Object.create(sim);
+    P.addStroke = (pts, o) => sim.addStroke(off(pts), o);
+    P.addBall = (X, Y, R, d, e) => sim.addBall(X + ox, Y + oy, R, d, e);
+    P.fillPoly = (t, poly, mc) => sim.fillPoly(t, off(poly), mc);
+    // Aufgaben: unten Platz für die Aufgaben-Anzeige lassen
+    const m = fn(P, HOME.w, taskIdx >= 0 ? HOME.h - 80 : HOME.h, barH());
+    const zones = (m.zones || []).map(z => ({ ...z, x: z.x + ox, y: z.y + oy }));
+    const inZ = (Z, X, Y) => X > Z.x && X < Z.x + Z.w && Y > Z.y && Y < Z.y + Z.h;
+    const st = {
+      sim, P, t: 0, ball: null, zones, ink: 0, okT: 0, state: 'run', res: null,
+      count(zi, t) { const Z = zones[zi], p = sim.p; let c = 0; for (let i = 0; i < sim.n; i++) if (p.type[i] === t && inZ(Z, p.x[i], p.y[i])) c++; return c; },
+      inZone: (zi, b) => inZ(zones[zi], b.x, b.y),
+      spawnBall(X, Y, R, d) { const b = sim.addBall(X + ox, Y + oy, R, d); b.fixed = true; st.ball = b; return b; },
+      removeBall(b) { sim.balls = sim.balls.filter(o => o !== b); if (st.ball === b) st.ball = null; },
+    };
+    if (m.fill) m.fill(st);
+    if (taskIdx < 0) {   // Demo: alles darf radiert und rückgängig gemacht werden
+      for (const s of sim.strokes) undo.push({ t: 's', id: s.id });
+      for (const b of sim.balls) undo.push({ t: 'b', b });
+    }
     setRain(!!m.rain);
-    scene = { t: 0, period: m.period || 0, emitters: (m.emitters || []).map(e => ({ ...e, acc: 0, done: 0 })), events: (m.events || []).map(e => ({ ...e })) };
-    $('sceneNo').textContent = (sceneIdx + 1) + '/' + SCENES.length;
-    toast(`<b>${sceneIdx + 1}/${SCENES.length} · ${m.name}</b><small>${m.desc}</small>`, 6500);
+    scene = { m, st, P, task: taskIdx, t: 0, period: m.period || 0,
+      emitters: (m.emitters || []).map(e => ({ ...e, x: e.x + ox, y: e.y + oy, acc: 0, done: 0 })), events: (m.events || []).map(e => ({ ...e })) };
+    if (!isHome()) homeView();
+    apply();
+    return m;
   }
+  function loadScene(k) {
+    sceneIdx = (k + SCENES.length) % SCENES.length;
+    const m = build(SCENES[sceneIdx], -1);
+    $('sceneNo').textContent = (sceneIdx + 1) + '/' + SCENES.length;
+    taskBox(); toast(`<b>${sceneIdx + 1}/${SCENES.length} · ${m.name}</b><small>${m.desc}</small>`, 6500);
+  }
+  function loadTask(k) {
+    k = (k + TASKS.length) % TASKS.length;
+    const m = build(TASKS[k], k);
+    selectTool('draw');
+    taskBox(); toast(`<b>Aufgabe ${k + 1}/${TASKS.length} · ${m.name}</b><small>${m.desc}</small>`, 6500);
+  }
+  function endScene() { scene = null; apply(); taskBox(); }
   $('scene').onclick = () => loadScene(sceneIdx + 1);
+
+  // Aufgaben-Anzeige unten: Ziel, Fortschritt, Neustart/Weiter/Beenden
+  const tb = $('taskbox'); let tbT = 0;
+  function taskBox(force) {
+    if (!scene || scene.task < 0) { tb.classList.remove('show'); return; }
+    const now = performance.now(); if (!force && now - tbT < 120) return; tbT = now;
+    const st = scene.st, r = st.res || { p: 0, txt: '' }, k = scene.task;
+    tb.className = 'show' + (st.state === 'done' ? ' done' : st.state === 'fail' ? ' fail' : '');
+    $('tbName').textContent = `${k + 1}/${TASKS.length} · ${scene.m.name}`;
+    $('tbTxt').textContent = st.state === 'done' ? `Geschafft in ${st.doneT.toFixed(1)} s · Tinte ${Math.round(st.ink)} px`
+      : st.state === 'fail' ? `${r.txt} – nochmal?` : r.txt;
+    $('tbBar').style.width = (clamp(st.state === 'done' ? 1 : r.p, 0, 1) * 100).toFixed(1) + '%';
+    $('tbNext').style.display = st.state === 'done' ? '' : 'none';
+  }
+  $('tbRe').onclick = () => loadTask(scene.task);
+  $('tbNext').onclick = () => loadTask(scene.task + 1);
+  $('tbX').onclick = () => endScene();
 
   function runScene(dt) {
     if (!scene) return;
     scene.t += dt;
+    const st = scene.st; st.t = scene.t;
+    if (st.ball && !sim.balls.includes(st.ball)) st.ball = null;       // aus der Welt gefallen
     for (const e of scene.emitters) {
       if (e.done >= e.total) continue;
+      if (e.jet) {   // Düse: eine Reihe Tropfen pro Bild, 12 px Abstand
+        for (let c = 0; c < e.jet; c++) { const X = e.x + (c - (e.jet - 1) / 2) * 12 + (Math.random() - 0.5) * 0.6; if (sim.isFree(X, e.y, 3) && sim.addParticle(e.mat, X, e.y, 0, e.vy) >= 0) e.done++; }
+        continue;
+      }
       e.acc = Math.min(e.acc + e.rate * dt, e.rate * 0.1 + 1);   // kein Stau-Schwall, wenn Platz kurz belegt war
       while (e.acc >= 1 && e.done < e.total) {
         e.acc -= 1;
@@ -907,8 +1245,23 @@ if (typeof module !== 'undefined') module.exports = { createSim, SCENES };
     }
     for (const ev of scene.events) {
       if (ev.done || scene.t < ev.t) continue;
-      ev.run(sim);
+      ev.run(scene.P);
       if (scene.period) ev.t += scene.period; else ev.done = true;
+    }
+    if (scene.m.tick) scene.m.tick(st, dt);
+    if (scene.task >= 0 && st.state === 'run') {
+      const r = st.res = scene.m.check(st);
+      if (r.fail) { st.state = 'fail'; taskBox(true); }
+      else {
+        st.okT = r.ok ? st.okT + dt : 0;
+        if (r.ok && st.okT >= (scene.m.hold || 0)) {
+          st.state = 'done'; st.doneT = st.t; solved[scene.task] = true;
+          try { localStorage.setItem(TKEY, JSON.stringify(solved)); } catch (e) { }
+          toast(`<b>Geschafft! · ${scene.m.name}</b><small>${st.doneT.toFixed(1)} s · Tinte ${Math.round(st.ink)} px</small>`, 4000);
+          taskBox(true);
+        }
+      }
+      taskBox();
     }
   }
 
@@ -936,55 +1289,128 @@ if (typeof module !== 'undefined') module.exports = { createSim, SCENES };
   function finishStroke(raw) {
     if (raw.length < 2) return;
     let len = 0; for (let i = 1; i < raw.length; i++) len += Math.hypot(raw[i][0] - raw[i - 1][0], raw[i][1] - raw[i - 1][1]);
-    if (len < 10) return;
+    if (len < 8 / view.z) return;
     let p = chaikin(chaikin(raw));
-    p = rdp(p, 1.5);
+    p = rdp(p, Math.min(1.5, 1.2 / view.z));
     // Schließen, wenn Ende nah am Anfang (verhindert Mini-Lücken)
     const s = p[0], e = p[p.length - 1];
     if (p.length > 3 && len > 60 && Math.hypot(s[0] - e[0], s[1] - e[1]) < 20) p[p.length - 1] = [s[0], s[1]];
-    undo.push({ t: 's', id: sim.addStroke(p) });
+    undo.push({ t: 's', id: sim.addStroke(p, { rad: PEN[set.pen] }) });
+    if (scene && scene.task >= 0) scene.st.ink += len;
   }
 
-  // ---------- Eingabe ----------
-  let drawing = null, pointer = { x: 0, y: 0, down: false };
-  cv.addEventListener('pointerdown', e => {
-    if (sheet.classList.contains('open') && window.innerWidth < 760) { $('close').onclick(); return; }   // Tippen neben das Menü schließt es
-    cv.setPointerCapture(e.pointerId);
-    pointer = { x: e.clientX, y: e.clientY, down: true };
-    if (ui.tool === 'draw') drawing = [[e.clientX, e.clientY]];
-    else if (ui.tool === 'erase') eraseAt(e.clientX, e.clientY);
-    else if (ui.tool === 'ball') {
-      const R = set.bsize;
-      if (sim.isFree(e.clientX, e.clientY, R)) { sim.addBall(e.clientX, e.clientY, R, set.bdens); undo.push({ t: 'b', b: sim.balls[sim.balls.length - 1] }); }
+  // ---------- Radierer: schneidet nur dort, wo gewischt wird ----------
+  let erase = null;   // laufende Radier-Geste: {added:Set(id), removed:[Strich], balls:[], last:[x,y]}
+  function eraseOne(X, Y, R) {
+    const r = sim.eraseCircle(X, Y, R);
+    for (const s of r.removed) { if (erase.added.has(s.id)) erase.added.delete(s.id); else erase.removed.push(s); }
+    for (const s of r.added) erase.added.add(s.id);
+    const keep = sim.balls.filter(b => b.fixed || Math.hypot(b.x - X, b.y - Y) > b.r + R);
+    if (keep.length !== sim.balls.length) { for (const b of sim.balls) if (!keep.includes(b)) erase.balls.push(b); sim.balls = keep; }
+  }
+  function eraseTo(X, Y) {   // Weg seit dem letzten Ereignis lückenlos abfahren (schnelles Wischen)
+    const R = ERASER[set.eraser], [lx, ly] = erase.last, n = Math.max(1, Math.ceil(Math.hypot(X - lx, Y - ly) / (R * 0.5)));
+    for (let k = 1; k <= n; k++) eraseOne(lx + (X - lx) * k / n, ly + (Y - ly) * k / n, R);
+    erase.last = [X, Y];
+  }
+  function endErase() {
+    if (erase.removed.length || erase.balls.length) undo.push({ t: 'e', added: erase.added, removed: erase.removed, balls: erase.balls });
+    erase = null;
+  }
+
+  // ---------- Eingabe: 1 Finger/linke Maustaste = Werkzeug, 2 Finger = Zoom + Verschieben ----------
+  // Maus: Rad = Zoom, rechte/mittlere Taste oder Leertaste + Ziehen = Verschieben
+  const ptrs = new Map();          // aktive Zeiger: id -> [sx, sy]
+  let act = null, pan = null, pinch = null, lock = false, spaceDown = false, drawing = null;
+  const pointer = { x: 0, y: 0, down: false, hover: false };
+  function startTool(id, X, Y) {
+    act = { id, tool: ui.tool };
+    pointer.x = X; pointer.y = Y; pointer.down = true;
+    if (ui.tool === 'draw') drawing = [[X, Y]];
+    else if (ui.tool === 'erase') { erase = { added: new Set(), removed: [], balls: [], last: [X, Y] }; eraseOne(X, Y, ERASER[set.eraser]); }
+  }
+  function moveTool(e) {
+    const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [];
+    if (!evs.length) evs.push(e);
+    for (const ev of evs) {
+      const [X, Y] = toWorld(...local(ev));
+      if (act.tool === 'draw' && drawing) { const l = drawing[drawing.length - 1]; if (Math.hypot(X - l[0], Y - l[1]) >= 1.5 / view.z) drawing.push([X, Y]); }
+      else if (act.tool === 'erase' && erase) eraseTo(X, Y);
+      pointer.x = X; pointer.y = Y;
     }
+  }
+  function endTool(cancel) {
+    pointer.down = false;
+    if (drawing) { if (!cancel) finishStroke(drawing); drawing = null; }
+    if (erase) endErase();
+    if (act.tool === 'ball' && !cancel) {   // Ball beim Loslassen setzen (so wird beim Zoomen mit 2 Fingern kein Ball gesetzt)
+      const R = set.bsize;
+      if (sim.isFree(pointer.x, pointer.y, R)) undo.push({ t: 'b', b: sim.addBall(pointer.x, pointer.y, R, set.bdens) });
+    }
+    act = null;
+  }
+  function pinchState() { const [a, b] = [...ptrs.values()]; return { d: Math.max(1, Math.hypot(a[0] - b[0], a[1] - b[1])), mx: (a[0] + b[0]) / 2, my: (a[1] + b[1]) / 2 }; }
+  cv.addEventListener('pointerdown', e => {
+    if (popFor) { closePop(); return; }
+    if (sheet.classList.contains('open') && window.innerWidth < 760) { $('close').onclick(); return; }   // Tippen neben das Menü schließt es
+    try { cv.setPointerCapture(e.pointerId); } catch (err) { }
+    const [sx, sy] = local(e); ptrs.set(e.pointerId, [sx, sy]);
+    if (e.pointerType === 'mouse' && (e.button === 1 || e.button === 2 || spaceDown)) { pan = { id: e.pointerId, sx, sy, vx: view.x, vy: view.y }; cv.style.cursor = 'grabbing'; e.preventDefault(); return; }
+    if (e.pointerType !== 'mouse' && ptrs.size === 2) {
+      if (act) endTool(true);      // erster Finger hat angefangen zu zeichnen -> verwerfen, jetzt wird gezoomt
+      const p = pinchState(); pinch = { d0: p.d, z0: view.z, wx: p.mx / view.z + view.x, wy: p.my / view.z + view.y }; lock = true; return;
+    }
+    if (ptrs.size > 1 || lock || act || e.button > 0) return;
+    startTool(e.pointerId, ...toWorld(sx, sy));
   });
   cv.addEventListener('pointermove', e => {
-    pointer.x = e.clientX; pointer.y = e.clientY;
-    if (!pointer.down) return;
-    if (ui.tool === 'draw' && drawing) {
-      const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
-      for (const ev of evs) {
-        const l = drawing[drawing.length - 1];
-        if (Math.hypot(ev.clientX - l[0], ev.clientY - l[1]) >= 2) drawing.push([ev.clientX, ev.clientY]);
-      }
-    } else if (ui.tool === 'erase') eraseAt(e.clientX, e.clientY);
+    const [sx, sy] = local(e);
+    if (ptrs.has(e.pointerId)) ptrs.set(e.pointerId, [sx, sy]);
+    if (e.pointerType === 'mouse') pointer.hover = true;
+    if (pan && pan.id === e.pointerId) { view.x = pan.vx - (sx - pan.sx) / view.z; view.y = pan.vy - (sy - pan.sy) / view.z; clampView(); return; }
+    if (pinch && ptrs.size >= 2) {
+      const p = pinchState(); view.z = clamp(pinch.z0 * p.d / pinch.d0, minZ(), MAXZ);
+      view.x = pinch.wx - p.mx / view.z; view.y = pinch.wy - p.my / view.z; clampView(); return;
+    }
+    if (act && act.id === e.pointerId) moveTool(e);
+    else if (!act) [pointer.x, pointer.y] = toWorld(sx, sy);
   });
-  const up = () => { pointer.down = false; if (drawing) { finishStroke(drawing); drawing = null; } };
+  const up = e => {
+    ptrs.delete(e.pointerId);
+    if (pan && pan.id === e.pointerId) { pan = null; cv.style.cursor = spaceDown ? 'grab' : ''; }
+    if (pinch && ptrs.size < 2) pinch = null;
+    if (act && act.id === e.pointerId) endTool(e.type === 'pointercancel');
+    if (ptrs.size === 0) lock = false;
+  };
   cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
-
-  function eraseAt(X, Y) {
-    const id = sim.strokeAt(X, Y, 12); if (id) sim.removeStroke(id);
-    sim.balls = sim.balls.filter(b => Math.hypot(b.x - X, b.y - Y) > b.r + 10);
-  }
+  cv.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') pointer.hover = false; });
+  cv.addEventListener('contextmenu', e => e.preventDefault());
+  cv.addEventListener('wheel', e => {
+    e.preventDefault();
+    const [sx, sy] = local(e), dy = e.deltaY * (e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? 400 : 1);
+    zoomAt(sx, sy, Math.exp(-clamp(dy, -200, 200) * (e.ctrlKey ? 0.01 : 0.0015)));   // ctrl = Trackpad-Pinch
+  }, { passive: false });
+  document.addEventListener('gesturestart', e => e.preventDefault());   // iOS: Seiten-Zoom unterdrücken
+  window.addEventListener('keydown', e => {
+    if (e.target.closest && e.target.closest('input')) return;
+    if (e.code === 'Space') { spaceDown = true; if (!pan) cv.style.cursor = 'grab'; e.preventDefault(); }
+    else if (e.key === '+' || e.key === '=') zoomAt(W / 2, H / 2, 1.25);
+    else if (e.key === '-') zoomAt(W / 2, H / 2, 0.8);
+    else if (e.key === '0') homeView();
+    else if ((e.ctrlKey || e.metaKey) && e.key === 'z') { $('undo').onclick(); e.preventDefault(); }
+  });
+  window.addEventListener('keyup', e => { if (e.code === 'Space') { spaceDown = false; if (!pan) cv.style.cursor = ''; } });
 
   // ---------- Emitter (Regen, Schütten) ----------
   let rainAcc = 0;
   function emit(dt) {
     if (ui.rain && set.rate > 0) {
-      rainAcc += set.rate * dt;
+      // Regen fällt über dem sichtbaren Ausschnitt (Rate auf die sichtbare Breite bezogen)
+      const x0 = Math.max(0, view.x - 40), x1 = Math.min(WW, view.x + W / view.z + 40);
+      rainAcc += set.rate * clamp((x1 - x0) / W0, 0.3, 2) * dt;
       while (rainAcc >= 1) {
         rainAcc -= 1;
-        sim.addParticle(set.mat, Math.random() * W, -4 - Math.random() * 16, sim.windNow * sim.PPM * 0.5, 300 + Math.random() * 100);
+        sim.addParticle(set.mat, x0 + Math.random() * (x1 - x0), -4 - Math.random() * 16, sim.windNow * sim.PPM * 0.5, 300 + Math.random() * 100);
       }
     }
     if (ui.tool === 'pour' && pointer.down) {
@@ -996,23 +1422,49 @@ if (typeof module !== 'undefined') module.exports = { createSim, SCENES };
     }
   }
 
-  // ---------- Wind-Visualisierung (rein kosmetisch) ----------
+  // ---------- Wind-Visualisierung (rein kosmetisch, Bildschirmkoordinaten) ----------
   const streaks = Array.from({ length: 60 }, () => ({ x: Math.random() * 2000, y: Math.random() * 1200, l: 20 + Math.random() * 40 }));
 
   // ---------- Rendern ----------
   const sandCols = ['#d8b26a', '#c79b52', '#e6c787'];
+  const worldGrad = ctx.createLinearGradient(0, 0, 0, WH); worldGrad.addColorStop(0, '#1b3a5a'); worldGrad.addColorStop(0.5, '#16324f'); worldGrad.addColorStop(1, '#0d1b2a');
   function render() {
+    const z = view.z, px1 = 1 / z;   // 1 Bildschirmpixel in Weltkoordinaten
     ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-    const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#16324f'); g.addColorStop(1, '#0d1b2a');
-    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = '#060e18'; ctx.fillRect(0, 0, W, H);
+    ctx.setTransform(DPR * z, 0, 0, DPR * z, -view.x * DPR * z, -view.y * DPR * z);
+    ctx.fillStyle = worldGrad; ctx.fillRect(0, 0, WW, WH);
+    // 1-m-Raster: zeigt Maßstab und Zoom
+    ctx.strokeStyle = 'rgba(200,225,255,0.045)'; ctx.lineWidth = px1; ctx.beginPath();
+    const PPM = sim.PPM;
+    for (let gx = PPM; gx < WW; gx += PPM) { ctx.moveTo(gx, 0); ctx.lineTo(gx, WH); }
+    for (let gy = WH - PPM; gy > 0; gy -= PPM) { ctx.moveTo(0, gy); ctx.lineTo(WW, gy); }
+    ctx.stroke();
+    ctx.strokeStyle = 'rgba(200,225,255,0.14)'; ctx.strokeRect(0, 0, WW, WH);
 
     if (Math.abs(sim.windNow) > 0.2) {
+      ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
       ctx.strokeStyle = 'rgba(200,230,255,0.18)'; ctx.lineWidth = 1; ctx.beginPath();
       for (const s of streaks) {
-        s.x += sim.windNow * sim.PPM / 60 * 0.6; if (s.x > W + 60) s.x = -60; if (s.x < -60) s.x = W + 60;
+        s.x += sim.windNow * sim.PPM * z / 60 * 0.6; if (s.x > W + 60) s.x = -60; if (s.x < -60) s.x = W + 60;
         ctx.moveTo(s.x, s.y % H); ctx.lineTo(s.x - Math.sign(sim.windNow) * s.l, s.y % H);
       }
       ctx.stroke();
+      ctx.setTransform(DPR * z, 0, 0, DPR * z, -view.x * DPR * z, -view.y * DPR * z);
+    }
+
+    // Aufgaben: Zielbereiche und Düsen
+    if (scene && scene.task >= 0) {
+      const ok = scene.st.state === 'done';
+      ctx.setLineDash([6 * px1, 4 * px1]); ctx.lineWidth = 1.5 * px1;
+      for (const Z of scene.st.zones) {
+        ctx.strokeStyle = ok ? 'rgba(126,226,168,0.9)' : 'rgba(126,226,168,0.6)';
+        if (Z.line) { ctx.beginPath(); ctx.moveTo(Z.x, Z.y); ctx.lineTo(Z.x + Z.w, Z.y); ctx.stroke(); }
+        else { ctx.fillStyle = ok ? 'rgba(126,226,168,0.16)' : 'rgba(126,226,168,0.07)'; ctx.fillRect(Z.x, Z.y, Z.w, Z.h); ctx.strokeRect(Z.x, Z.y, Z.w, Z.h); }
+      }
+      ctx.setLineDash([]);
+      ctx.fillStyle = '#8ea4ba';
+      for (const e of scene.emitters) { const w = (e.jet || 2) * 12 + 8; ctx.beginPath(); ctx.roundRect ? ctx.roundRect(e.x - w / 2, e.y - 16, w, 12, 3) : ctx.rect(e.x - w / 2, e.y - 16, w, 12); ctx.fill(); }
     }
 
     const P = sim.p, n = sim.n;
@@ -1030,14 +1482,16 @@ if (typeof module !== 'undefined') module.exports = { createSim, SCENES };
       ctx.fill();
     }
 
-    ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.lineWidth = RS * 2; ctx.strokeStyle = '#e8eef5';
+    // Striche: eigene Dicke; feste Aufgaben-Striche in Bernstein (nicht radierbar)
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
     for (const s of sim.strokes) {
+      ctx.lineWidth = s.rad * 2; ctx.strokeStyle = s.fixed ? '#e9b95c' : '#e8eef5';
       ctx.beginPath(); ctx.moveTo(s.pts[0][0], s.pts[0][1]);
       for (let i = 1; i < s.pts.length; i++) ctx.lineTo(s.pts[i][0], s.pts[i][1]);
       ctx.stroke();
     }
     if (drawing && drawing.length > 1) {
-      ctx.strokeStyle = 'rgba(232,238,245,0.6)'; ctx.beginPath(); ctx.moveTo(drawing[0][0], drawing[0][1]);
+      ctx.lineWidth = PEN[set.pen] * 2; ctx.strokeStyle = 'rgba(232,238,245,0.6)'; ctx.beginPath(); ctx.moveTo(drawing[0][0], drawing[0][1]);
       for (const q of drawing) ctx.lineTo(q[0], q[1]); ctx.stroke();
     }
     // Bälle (Markierung zeigt Rotation -> Rollen vs. Rutschen sichtbar)
@@ -1047,9 +1501,10 @@ if (typeof module !== 'undefined') module.exports = { createSim, SCENES };
       ctx.strokeStyle = '#fff'; ctx.lineWidth = Math.max(1.5, b.r * 0.14); ctx.beginPath();
       ctx.moveTo(b.x, b.y); ctx.lineTo(b.x + Math.cos(b.ang) * b.r * 0.9, b.y + Math.sin(b.ang) * b.r * 0.9); ctx.stroke();
     }
-    if (ui.tool === 'erase' || ui.tool === 'pour') {
-      ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 1; ctx.beginPath();
-      ctx.arc(pointer.x, pointer.y, 12, 0, 6.2832); ctx.stroke();
+    // Werkzeug-Cursor (Maus: schwebend, Finger: solange gedrückt)
+    if ((pointer.down || pointer.hover) && !pan && !pinch) {
+      const rr = ui.tool === 'erase' ? ERASER[set.eraser] : ui.tool === 'pour' ? 12 : ui.tool === 'ball' ? set.bsize : ui.tool === 'draw' && !pointer.down ? PEN[set.pen] : 0;
+      if (rr) { ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = px1; ctx.beginPath(); ctx.arc(pointer.x, pointer.y, rr, 0, 6.2832); ctx.stroke(); }
     }
     if (set.debug) {
       ctx.fillStyle = '#ff0'; for (let i = 0; i < n; i++) if (P.nc[i] <= 1) ctx.fillRect(P.x[i] - 1, P.y[i] - 1, 2, 2);
@@ -1079,12 +1534,14 @@ if (typeof module !== 'undefined') module.exports = { createSim, SCENES };
     if (now - hudT > 250) {
       hudT = now;
       $('budget').textContent = set.auto ? `Gerade: ${sim.n} Partikel, Budget ${sim.maxP.toLocaleString('de-DE')}.` : `Gerade: ${sim.n} Partikel.`;
-      if (set.hud) $('hud').textContent = `FPS ${fps.toFixed(0)}  Schritt ${stepMs.toFixed(1)} ms\nPartikel ${sim.n} / ${sim.maxP}\nWind ${sim.windNow.toFixed(1)} m/s  Bälle ${sim.balls.length}`;
+      if (set.hud) $('hud').textContent = `FPS ${fps.toFixed(0)}  Schritt ${stepMs.toFixed(1)} ms\nPartikel ${sim.n} / ${sim.maxP}\nWind ${sim.windNow.toFixed(1)} m/s  Bälle ${sim.balls.length}\nZoom ${Math.round(view.z * 100)} %  Welt ${WW}×${WH} px`;
     }
     requestAnimationFrame(loop);
   }
+  window.drawflow = { sim, view, toWorld, get scene() { return scene; } };   // für die Konsole / Tests
   apply();
   sim.maxP = set.maxP;
+  homeView();
   loadScene(0);
   requestAnimationFrame(loop);
 })();

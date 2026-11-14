@@ -6,13 +6,26 @@ Starten: `index.html` im Browser öffnen. Keine Abhängigkeiten.
 
 ## Bedienung
 
-Schlanke Icon-Leiste oben: Zeichnen, Radieren, Ball, Schütten · Material (Wasser/Sand) · Regen · Rückgängig · nächste Demo (1/5 … 5/5) · Pause · Zahnrad.
+Schlanke Icon-Leiste oben: Zeichnen, Radieren, Ball, Schütten · Material (Wasser/Sand) · Regen · Aufgaben · Ansicht · Rückgängig · nächste Demo (1/5 … 5/5) · Pause · Zahnrad.
+
+- **Stift und Radierer** in drei Größen: lange drücken (Maus: Rechtsklick oder erneut klicken). Der Radierer schneidet Striche nur dort auf, wo gewischt wird. Rückgängig stellt sie wieder her.
+- **Zoom und Verschieben:** zwei Finger (Pinch). Am PC: Mausrad zoomt am Zeiger, rechte/mittlere Maustaste oder Leertaste + Ziehen verschiebt, Tasten `+` `−` `0`. Die Welt ist doppelt so breit und hoch wie der Bildschirm; das Rahmen-Symbol wechselt zwischen Startansicht und ganzer Welt.
 
 Zahnrad-Menü (Einstellungen werden im Browser gespeichert):
 
 - **Max. Wassertropfen** 500 – 10 000 (Standard 5 000); *Auto-Leistung* senkt das Budget, wenn das Gerät nicht hinterherkommt
 - **Dämpfung** (Viskosität), **Präzision** (Teilschritte pro Bild), **Regenstärke**
 - **Wind** und Böen, **Ball** (leicht/schwer, S/M/L), Statistik/Debug, Partikel leeren, Alles löschen
+
+## Aufgaben (Fahnen-Symbol)
+
+Bernsteinfarbene Striche gehören zur Aufgabe und lassen sich nicht radieren. Unten zeigt eine Leiste Fortschritt, Zeit und verbrauchte Tinte; gelöste Aufgaben werden abgehakt.
+
+1. **Becher füllen** – eine Rinne leitet den Strahl in den Becher
+2. **Ball ins Ziel** – Bahn über die Mauer in den Korb (liegt der Ball still, kommt ein neuer)
+3. **Boot heben** – Wasser in den Schacht leiten, bis der Ball über die Linie schwimmt (Auftrieb)
+4. **Sandburg im Wind** – in 6 s kommt Sturm, ein Windschutz muss 70 % der Burg 15 s halten
+5. **Gerecht teilen** – ein Strahl, zwei Becher
 
 ## Demo-Szenen
 
